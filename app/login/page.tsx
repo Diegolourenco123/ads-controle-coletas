@@ -1,81 +1,61 @@
-import Image from "next/image";
 import FormLogin from "../components/FormLogin";
 
 export default function LoginPage() {
   return (
     <main className="min-h-screen bg-slate-100">
-      <div className="grid min-h-screen lg:grid-cols-[1.1fr_0.9fr]">
-        {/* Lado esquerdo */}
-        <section className="relative hidden overflow-hidden bg-slate-950 p-12 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-emerald-500/20 blur-3xl" />
-          <div className="absolute -bottom-32 -right-20 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
-
-          <div className="relative">
-            <div className="inline-flex rounded-2xl bg-white p-4 shadow-xl">
-              <Image
-                src="/logo-ads.png"
-                alt="ADS Logística Ambiental"
-                width={240}
-                height={90}
-                priority
-                className="h-auto w-52 object-contain"
-              />
-            </div>
-          </div>
-
-          <div className="relative max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-emerald-400">
-              Centro de Inteligência Operacional
-            </p>
-
-            <h1 className="mt-5 text-5xl font-black leading-tight">
-              ADS Controle de Coletas
-            </h1>
-
-            <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
-              Gestão operacional, acompanhamento das coletas,
-              indicadores e controle financeiro em um único sistema.
-            </p>
-          </div>
-
-          <p className="relative text-xs text-slate-500">
-            ADS Logística Ambiental • Sistema de Gestão Operacional
-          </p>
+      <div className="grid min-h-screen lg:grid-cols-2">
+        {/* ======================================================
+            LADO ESQUERDO - IDENTIDADE VISUAL ADS
+        ====================================================== */}
+        <section
+          className="relative hidden min-h-screen overflow-hidden bg-slate-950 lg:block"
+          style={{
+            backgroundImage: "url('/login-ads-bg.png')",
+            backgroundSize: "200% 100%",
+            backgroundPosition: "left center",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          {/* Camada suave para reforçar contraste */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-transparent to-black/5" />
         </section>
 
-        {/* Lado direito */}
-        <section className="flex items-center justify-center p-5 sm:p-10">
-          <div className="w-full max-w-md">
-            <div className="mb-8 flex justify-center lg:hidden">
-              <Image
-                src="/logo-ads.png"
-                alt="ADS Logística Ambiental"
-                width={220}
-                height={82}
-                priority
-                className="h-auto w-48 object-contain"
-              />
-            </div>
+        {/* ======================================================
+            LADO DIREITO - LOGIN
+        ====================================================== */}
+        <section className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-5 py-10 sm:px-8 lg:px-12">
+          {/* Efeitos sutis de fundo */}
+          <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-emerald-100/40 blur-3xl" />
 
-            <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/60 sm:p-9">
+          <div className="pointer-events-none absolute -bottom-40 -left-32 h-96 w-96 rounded-full bg-slate-200/50 blur-3xl" />
+
+          <div className="relative w-full max-w-[500px]">
+            {/* ==================================================
+                CARD
+            ================================================== */}
+            <article className="rounded-[28px] border border-slate-200/80 bg-white px-7 py-9 shadow-[0_25px_70px_rgba(15,23,42,0.10)] sm:px-10 sm:py-11">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">
-                  Acesso Restrito
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-700">
+                  Acesso restrito
                 </p>
 
-                <h2 className="mt-3 text-3xl font-black text-slate-900">
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 sm:text-[34px]">
                   Bem-vindo ao ADS
-                </h2>
+                </h1>
 
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   Informe seu e-mail e senha para acessar o sistema.
                 </p>
               </div>
 
-              <FormLogin />
+              {/* Formulário real integrado ao Supabase */}
+              <div className="mt-8">
+                <FormLogin />
+              </div>
             </article>
 
-            <p className="mt-6 text-center text-xs text-slate-400">
+            {/* Rodapé */}
+            <p className="mt-7 text-center text-xs font-medium text-slate-400">
               © ADS Logística Ambiental
             </p>
           </div>

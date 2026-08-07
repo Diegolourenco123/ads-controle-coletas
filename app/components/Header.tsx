@@ -35,10 +35,13 @@ function obterNomeUsuario(
 export default function Header() {
   const [usuario, setUsuario] =
     useState<UsuarioLogado | null>(null);
-  const [carregando, setCarregando] = useState(true);
+
+  const [carregando, setCarregando] =
+    useState(true);
 
   useEffect(() => {
-    const supabase = criarClienteSupabaseBrowser();
+    const supabase =
+      criarClienteSupabaseBrowser();
 
     async function carregarUsuario() {
       const {
@@ -47,11 +50,22 @@ export default function Header() {
       } = await supabase.auth.getUser();
 
       if (error) {
+        // Na tela de login ainda não existe sessão.
+        // Não tratar isso como erro.
+        if (
+          error.name === "AuthSessionMissingError"
+        ) {
+          setUsuario(null);
+          setCarregando(false);
+          return;
+        }
+
         console.error(
           "Não foi possível carregar o usuário:",
           error,
         );
 
+        setUsuario(null);
         setCarregando(false);
         return;
       }
@@ -116,18 +130,16 @@ export default function Header() {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-5 px-6 py-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="relative h-14 w-36 shrink-0">
-            <Image
-              src="/logo-ads.png"
-              alt="ADS Logística Ambiental"
-              fill
-              priority
-              sizes="144px"
-              className="object-contain object-left"
-            />
-          </div>
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
+
+        <div className="flex items-center gap-5">
+          <Image
+            src="/logo-ads.png"
+            alt="ADS"
+            width={150}
+            height={60}
+            priority
+          />
 
           <div className="hidden min-w-0 sm:block">
             <h1 className="truncate text-xl font-bold text-slate-900">
@@ -142,6 +154,7 @@ export default function Header() {
 
         <div className="flex shrink-0 items-center gap-4">
           <div className="hidden text-right md:block">
+
             {carregando ? (
               <>
                 <p className="text-sm font-semibold text-slate-500">
@@ -181,10 +194,12 @@ export default function Header() {
                 </p>
               </>
             )}
+
           </div>
 
           <BotaoSair />
         </div>
+
       </div>
     </header>
   );

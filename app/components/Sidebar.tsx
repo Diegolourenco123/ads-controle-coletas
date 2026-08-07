@@ -42,15 +42,14 @@ function verificarItemAtivo(
   pathname: string,
   href: string,
 ) {
-  if (href === "/") {
-    return pathname === "/";
-  }
+  const rotasExatas = [
+    "/",
+    "/coletas",
+    "/coletas/nova",
+  ];
 
-  if (href === "/coletas") {
-    return (
-      pathname === "/coletas" ||
-      pathname.startsWith("/coletas/")
-    );
+  if (rotasExatas.includes(href)) {
+    return pathname === href;
   }
 
   return (
@@ -63,8 +62,8 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-h-[calc(100vh-87px)] bg-slate-950 p-5 text-white lg:block">
-      <p className="mb-4 px-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+    <aside className="min-h-screen bg-slate-950 px-5 py-7 text-white">
+      <p className="mb-8 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Menu principal
       </p>
 

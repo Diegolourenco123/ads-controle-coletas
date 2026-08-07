@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import { supabase } from "../lib/supabase";
@@ -20,14 +26,37 @@ type Transportadora = {
 const campo =
   "mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
 
-const rotulo = "text-sm font-semibold text-slate-700";
+const rotulo =
+  "text-sm font-semibold text-slate-700";
 
 export default function TransportadorasPage() {
-  const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
-  const [pesquisa, setPesquisa] = useState("");
-  const [mensagem, setMensagem] = useState("");
-  const [carregando, setCarregando] = useState(true);
-  const [salvando, setSalvando] = useState(false);
+  const formularioRef =
+    useRef<HTMLFormElement>(null);
+
+  const [transportadoras, setTransportadoras] =
+    useState<Transportadora[]>([]);
+
+  const [pesquisa, setPesquisa] =
+    useState("");
+
+  const [mensagem, setMensagem] =
+    useState("");
+
+  const [carregando, setCarregando] =
+    useState(true);
+
+  const [salvando, setSalvando] =
+    useState(false);
+
+  const [
+    transportadoraEditando,
+    setTransportadoraEditando,
+  ] = useState<Transportadora | null>(null);
+
+  const [
+    transportadoraVisualizando,
+    setTransportadoraVisualizando,
+  ] = useState<Transportadora | null>(null);
 
   async function carregarTransportadoras() {
     setCarregando(true);
@@ -39,14 +68,19 @@ export default function TransportadorasPage() {
 
     if (error) {
       console.error(error);
+
       setMensagem(
         `Não foi possível carregar as transportadoras: ${error.message}`,
       );
+
       setCarregando(false);
       return;
     }
 
-    setTransportadoras((data ?? []) as Transportadora[]);
+    setTransportadoras(
+      (data ?? []) as Transportadora[],
+    );
+
     setCarregando(false);
   }
 
@@ -54,12 +88,94 @@ export default function TransportadorasPage() {
     carregarTransportadoras();
   }, []);
 
-  async function cadastrarTransportadora(
+  function preencherCampo(
+    nome: string,
+    valor: string | number | null,
+  ) {
+    const elemento =
+      formularioRef.current?.elements.namedItem(
+        nome,
+      ) as
+        | HTMLInputElement
+        | HTMLTextAreaElement
+        | null;
+
+    if (elemento) {
+      elemento.value =
+        valor !== null &&
+        valor !== undefined
+          ? String(valor)
+          : "";
+    }
+  }
+
+  function iniciarEdicao(
+    transportadora: Transportadora,
+  ) {
+    setTransportadoraEditando(
+      transportadora,
+    );
+
+    setMensagem("");
+
+    preencherCampo(
+      "nome",
+      transportadora.nome,
+    );
+
+    preencherCampo(
+      "cnpj",
+      transportadora.cnpj,
+    );
+
+    preencherCampo(
+      "contato",
+      transportadora.contato,
+    );
+
+    preencherCampo(
+      "telefone",
+      transportadora.telefone,
+    );
+
+    preencherCampo(
+      "email",
+      transportadora.email,
+    );
+
+    preencherCampo(
+      "prazoMedio",
+      transportadora.prazo_medio,
+    );
+
+    preencherCampo(
+      "observacoes",
+      transportadora.observacoes,
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  function cancelarEdicao() {
+    setTransportadoraEditando(null);
+
+    formularioRef.current?.reset();
+
+    setMensagem(
+      "Edição cancelada.",
+    );
+  }
+
+  async function salvarTransportadora(
     evento: FormEvent<HTMLFormElement>,
   ) {
     evento.preventDefault();
 
-    const formulario = evento.currentTarget;
+    const formulario =
+      evento.currentTarget;
 
     if (!formulario.checkValidity()) {
       formulario.reportValidity();
@@ -67,49 +183,113 @@ export default function TransportadorasPage() {
     }
 
     setSalvando(true);
-    setMensagem("Salvando transportadora...");
 
-    const dados = new FormData(formulario);
+    setMensagem(
+      transportadoraEditando
+        ? "Salvando alterações..."
+        : "Salvando transportadora...",
+    );
 
-    const valorOuNulo = (nome: string) => {
-      const valor = dados.get(nome)?.toString().trim();
-      return valor ? valor : null;
+    const dados =
+      new FormData(formulario);
+
+    const valorOuNulo = (
+      nome: string,
+    ) => {
+      const valor = dados
+        .get(nome)
+        ?.toString()
+        .trim();
+
+      return valor
+        ? valor
+        : null;
     };
 
-    const prazoInformado = valorOuNulo("prazoMedio");
+    const prazoInformado =
+      valorOuNulo("prazoMedio");
 
-    const novaTransportadora = {
+    const dadosTransportadora = {
       nome: valorOuNulo("nome"),
       cnpj: valorOuNulo("cnpj"),
-      contato: valorOuNulo("contato"),
-      telefone: valorOuNulo("telefone"),
+      contato:
+        valorOuNulo("contato"),
+      telefone:
+        valorOuNulo("telefone"),
       email: valorOuNulo("email"),
-      prazo_medio: prazoInformado ? Number(prazoInformado) : null,
-      observacoes: valorOuNulo("observacoes"),
+
+      prazo_medio:
+        prazoInformado
+          ? Number(prazoInformado)
+          : null,
+
+      observacoes:
+        valorOuNulo("observacoes"),
     };
 
-    const { error } = await supabase
-      .from("transportadoras")
-      .insert(novaTransportadora);
+    if (transportadoraEditando) {
+      const { error } = await supabase
+        .from("transportadoras")
+        .update(dadosTransportadora)
+        .eq(
+          "id",
+          transportadoraEditando.id,
+        );
 
-    if (error) {
-      console.error(error);
-      setMensagem(`Não foi possível salvar: ${error.message}`);
-      setSalvando(false);
-      return;
+      if (error) {
+        console.error(error);
+
+        setMensagem(
+          `Não foi possível atualizar: ${error.message}`,
+        );
+
+        setSalvando(false);
+        return;
+      }
+
+      setMensagem(
+        "Transportadora atualizada com sucesso!",
+      );
+
+      setTransportadoraEditando(
+        null,
+      );
+    } else {
+      const { error } = await supabase
+        .from("transportadoras")
+        .insert(dadosTransportadora);
+
+      if (error) {
+        console.error(error);
+
+        setMensagem(
+          `Não foi possível salvar: ${error.message}`,
+        );
+
+        setSalvando(false);
+        return;
+      }
+
+      setMensagem(
+        "Transportadora cadastrada com sucesso!",
+      );
     }
 
     formulario.reset();
-    setMensagem("Transportadora cadastrada com sucesso!");
+
     setSalvando(false);
 
     await carregarTransportadoras();
   }
 
-  async function excluirTransportadora(id: number, nome: string) {
-    const confirmou = window.confirm(
-      `Deseja realmente excluir a transportadora "${nome}"?`,
-    );
+  async function excluirTransportadora(
+    id: number,
+    nome: string,
+  ) {
+    const confirmou =
+      window.confirm(
+        `Deseja realmente excluir a transportadora "${nome}"?`,
+      );
 
     if (!confirmou) {
       return;
@@ -122,36 +302,59 @@ export default function TransportadorasPage() {
 
     if (error) {
       console.error(error);
-      setMensagem(`Não foi possível excluir: ${error.message}`);
+
+      setMensagem(
+        `Não foi possível excluir: ${error.message}`,
+      );
+
       return;
     }
 
-    setMensagem("Transportadora excluída com sucesso!");
+    if (
+      transportadoraEditando?.id ===
+      id
+    ) {
+      setTransportadoraEditando(
+        null,
+      );
+
+      formularioRef.current?.reset();
+    }
+
+    setMensagem(
+      "Transportadora excluída com sucesso!",
+    );
+
     await carregarTransportadoras();
   }
 
-  const termo = pesquisa.trim().toLowerCase();
+  const termo =
+    pesquisa.trim().toLowerCase();
 
-  const transportadorasFiltradas = transportadoras.filter(
-    (transportadora) => {
-      if (!termo) {
-        return true;
-      }
+  const transportadorasFiltradas =
+    transportadoras.filter(
+      (transportadora) => {
+        if (!termo) {
+          return true;
+        }
 
-      const conteudo = [
-        transportadora.nome,
-        transportadora.cnpj,
-        transportadora.contato,
-        transportadora.telefone,
-        transportadora.email,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+        const conteudo = [
+          transportadora.nome,
+          transportadora.cnpj,
+          transportadora.contato,
+          transportadora.telefone,
+          transportadora.email,
+          transportadora.observacoes,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-      return conteudo.includes(termo);
-    },
-  );
+        return conteudo.includes(
+          termo,
+        );
+      },
+    );
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -171,8 +374,9 @@ export default function TransportadorasPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Cadastre e consulte as transportadoras utilizadas nas
-              coletas.
+              Cadastre, consulte e
+              atualize as transportadoras
+              utilizadas nas coletas.
             </p>
           </div>
 
@@ -183,22 +387,47 @@ export default function TransportadorasPage() {
           )}
 
           <form
-            onSubmit={cadastrarTransportadora}
+            ref={formularioRef}
+            onSubmit={
+              salvarTransportadora
+            }
             className="mb-7 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
           >
-            <div className="mb-6">
-              <h3 className="text-lg font-bold">
-                Cadastrar transportadora
-              </h3>
+            <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                  {transportadoraEditando
+                    ? "Modo de edição"
+                    : "Cadastro"}
+                </p>
 
-              <p className="text-sm text-slate-500">
-                Preencha os dados da empresa responsável pelo
-                transporte.
-              </p>
+                <h3 className="mt-1 text-lg font-bold">
+                  {transportadoraEditando
+                    ? "Editar transportadora"
+                    : "Cadastrar transportadora"}
+                </h3>
+
+                <p className="text-sm text-slate-500">
+                  {transportadoraEditando
+                    ? `Alterando os dados de ${transportadoraEditando.nome}.`
+                    : "Preencha os dados da empresa responsável pelo transporte."}
+                </p>
+              </div>
+
+              {transportadoraEditando && (
+                <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                  Editando registro #
+                  {
+                    transportadoraEditando.id
+                  }
+                </span>
+              )}
             </div>
 
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 Nome da transportadora *
                 <input
                   type="text"
@@ -209,7 +438,9 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 CNPJ
                 <input
                   type="text"
@@ -219,7 +450,9 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 Contato
                 <input
                   type="text"
@@ -229,7 +462,9 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 Telefone
                 <input
                   type="text"
@@ -239,7 +474,9 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 E-mail
                 <input
                   type="email"
@@ -249,7 +486,9 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label className={rotulo}>
+              <label
+                className={rotulo}
+              >
                 Prazo médio em dias
                 <input
                   type="number"
@@ -261,7 +500,9 @@ export default function TransportadorasPage() {
               </label>
             </div>
 
-            <label className={`${rotulo} mt-5 block`}>
+            <label
+              className={`${rotulo} mt-5 block`}
+            >
               Observações
               <textarea
                 name="observacoes"
@@ -271,7 +512,20 @@ export default function TransportadorasPage() {
               />
             </label>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex flex-col justify-end gap-3 sm:flex-row">
+              {transportadoraEditando && (
+                <button
+                  type="button"
+                  onClick={
+                    cancelarEdicao
+                  }
+                  disabled={salvando}
+                  className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancelar edição
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={salvando}
@@ -279,7 +533,9 @@ export default function TransportadorasPage() {
               >
                 {salvando
                   ? "Salvando..."
-                  : "Cadastrar transportadora"}
+                  : transportadoraEditando
+                    ? "Salvar alterações"
+                    : "Cadastrar transportadora"}
               </button>
             </div>
           </form>
@@ -288,11 +544,15 @@ export default function TransportadorasPage() {
             <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center">
               <div>
                 <h3 className="text-lg font-bold">
-                  Transportadoras cadastradas
+                  Transportadoras
+                  cadastradas
                 </h3>
 
                 <p className="text-sm text-slate-500">
-                  {transportadorasFiltradas.length} registro(s)
+                  {
+                    transportadorasFiltradas.length
+                  }{" "}
+                  registro(s)
                   encontrado(s)
                 </p>
               </div>
@@ -301,7 +561,9 @@ export default function TransportadorasPage() {
                 type="search"
                 value={pesquisa}
                 onChange={(evento) =>
-                  setPesquisa(evento.target.value)
+                  setPesquisa(
+                    evento.target.value,
+                  )
                 }
                 placeholder="Pesquisar transportadora..."
                 className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600 md:w-80"
@@ -309,16 +571,36 @@ export default function TransportadorasPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-left">
+              <table className="w-full min-w-[1100px] text-left">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-5 py-4">Transportadora</th>
-                    <th className="px-5 py-4">CNPJ</th>
-                    <th className="px-5 py-4">Contato</th>
-                    <th className="px-5 py-4">Telefone</th>
-                    <th className="px-5 py-4">E-mail</th>
-                    <th className="px-5 py-4">Prazo</th>
-                    <th className="px-5 py-4">Ações</th>
+                    <th className="px-5 py-4">
+                      Transportadora
+                    </th>
+
+                    <th className="px-5 py-4">
+                      CNPJ
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Contato
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Telefone
+                    </th>
+
+                    <th className="px-5 py-4">
+                      E-mail
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Prazo
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
 
@@ -329,69 +611,110 @@ export default function TransportadorasPage() {
                         colSpan={7}
                         className="px-5 py-8 text-center text-slate-500"
                       >
-                        Carregando transportadoras...
+                        Carregando
+                        transportadoras...
                       </td>
                     </tr>
                   )}
 
                   {!carregando &&
-                    transportadorasFiltradas.length === 0 && (
+                    transportadorasFiltradas.length ===
+                      0 && (
                       <tr>
                         <td
                           colSpan={7}
                           className="px-5 py-8 text-center text-slate-500"
                         >
-                          Nenhuma transportadora cadastrada.
+                          Nenhuma
+                          transportadora
+                          cadastrada.
                         </td>
                       </tr>
                     )}
 
                   {!carregando &&
                     transportadorasFiltradas.map(
-                      (transportadora) => (
+                      (
+                        transportadora,
+                      ) => (
                         <tr
-                          key={transportadora.id}
+                          key={
+                            transportadora.id
+                          }
                           className="transition hover:bg-slate-50"
                         >
                           <td className="px-5 py-4 font-semibold text-slate-900">
-                            {transportadora.nome}
+                            {
+                              transportadora.nome
+                            }
                           </td>
 
                           <td className="px-5 py-4">
-                            {transportadora.cnpj || "—"}
+                            {transportadora.cnpj ||
+                              "—"}
                           </td>
 
                           <td className="px-5 py-4">
-                            {transportadora.contato || "—"}
+                            {transportadora.contato ||
+                              "—"}
                           </td>
 
                           <td className="px-5 py-4">
-                            {transportadora.telefone || "—"}
+                            {transportadora.telefone ||
+                              "—"}
                           </td>
 
                           <td className="px-5 py-4">
-                            {transportadora.email || "—"}
+                            {transportadora.email ||
+                              "—"}
                           </td>
 
                           <td className="px-5 py-4">
-                            {transportadora.prazo_medio !== null
+                            {transportadora.prazo_medio !==
+                            null
                               ? `${transportadora.prazo_medio} dia(s)`
                               : "—"}
                           </td>
 
                           <td className="px-5 py-4">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                excluirTransportadora(
-                                  transportadora.id,
-                                  transportadora.nome,
-                                )
-                              }
-                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
-                            >
-                              Excluir
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setTransportadoraVisualizando(
+                                    transportadora,
+                                  )
+                                }
+                                className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                Visualizar
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  iniciarEdicao(
+                                    transportadora,
+                                  )
+                                }
+                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                              >
+                                Editar
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  excluirTransportadora(
+                                    transportadora.id,
+                                    transportadora.nome,
+                                  )
+                                }
+                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                              >
+                                Excluir
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ),
@@ -402,6 +725,151 @@ export default function TransportadorasPage() {
           </article>
         </section>
       </div>
+
+      {transportadoraVisualizando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 p-6">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                  Transportadora
+                </p>
+
+                <h3 className="mt-1 text-2xl font-bold text-slate-900">
+                  {
+                    transportadoraVisualizando.nome
+                  }
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setTransportadoraVisualizando(
+                    null,
+                  )
+                }
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="grid gap-5 p-6 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  CNPJ
+                </p>
+
+                <p className="mt-1 font-medium text-slate-800">
+                  {transportadoraVisualizando.cnpj ||
+                    "Não informado"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Contato
+                </p>
+
+                <p className="mt-1 font-medium text-slate-800">
+                  {transportadoraVisualizando.contato ||
+                    "Não informado"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Telefone
+                </p>
+
+                <p className="mt-1 font-medium text-slate-800">
+                  {transportadoraVisualizando.telefone ||
+                    "Não informado"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  E-mail
+                </p>
+
+                <p className="mt-1 break-all font-medium text-slate-800">
+                  {transportadoraVisualizando.email ||
+                    "Não informado"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Prazo médio
+                </p>
+
+                <p className="mt-1 font-medium text-slate-800">
+                  {transportadoraVisualizando.prazo_medio !==
+                  null
+                    ? `${transportadoraVisualizando.prazo_medio} dia(s)`
+                    : "Não informado"}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Código
+                </p>
+
+                <p className="mt-1 font-medium text-slate-800">
+                  #
+                  {
+                    transportadoraVisualizando.id
+                  }
+                </p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-xs font-semibold uppercase text-slate-400">
+                  Observações
+                </p>
+
+                <div className="mt-2 rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                  {transportadoraVisualizando.observacoes ||
+                    "Nenhuma observação cadastrada."}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5">
+              <button
+                type="button"
+                onClick={() => {
+                  iniciarEdicao(
+                    transportadoraVisualizando,
+                  );
+
+                  setTransportadoraVisualizando(
+                    null,
+                  );
+                }}
+                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+              >
+                Editar transportadora
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setTransportadoraVisualizando(
+                    null,
+                  )
+                }
+                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
