@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 type Coleta = {
@@ -101,14 +100,19 @@ const nomesIndicadores: Record<string, string> = {
 };
 
 export default function ColetasTable() {
-  const searchParams = useSearchParams();
-  const indicador = searchParams.get("indicador") ?? "";
+  const [indicador, setIndicador] = useState("");
 
   const [coletas, setColetas] = useState<Coleta[]>([]);
   const [pesquisa, setPesquisa] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [excluindoId, setExcluindoId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const parametros = new URLSearchParams(window.location.search);
+
+    setIndicador(parametros.get("indicador") ?? "");
+  }, []);
 
   useEffect(() => {
     async function carregarColetas() {
