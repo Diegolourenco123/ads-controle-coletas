@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Coleta = {
+  status: string | null;
   numero_nf: string | null;
   data_nf: string | null;
   data_envio_transportadora: string | null;
@@ -112,6 +114,7 @@ export default function DashboardCards() {
       const { data, error } = await supabase
         .from("coletas")
         .select(`
+          status,
           numero_nf,
           data_nf,
           data_envio_transportadora,
@@ -148,49 +151,43 @@ export default function DashboardCards() {
           (acumulador, coleta) => {
             acumulador.operacao.total += 1;
 
-            const semNf =
-              !coleta.numero_nf ||
-              !coleta.data_nf;
-
-            const solicitadaTransportadora =
-              Boolean(
-                coleta.data_envio_transportadora,
-              );
-
-            const coletaRealizada =
-              Boolean(
-                coleta.data_efetiva_coleta,
-              );
-
-            const recebidaAds =
-              Boolean(
-                coleta.data_chegada_ads,
+            const statusOperacional =
+              normalizarTexto(
+                coleta.status,
               );
 
             // -------------------------
             // OPERAÇÃO
+            // Fonte principal: status salvo da coleta
             // -------------------------
 
-            if (semNf) {
+            if (
+              statusOperacional ===
+              "aguardando nf"
+            ) {
               acumulador.operacao.aguardandoNf += 1;
             }
 
             if (
-              !semNf &&
-              solicitadaTransportadora &&
-              !coletaRealizada
+              statusOperacional ===
+              "aguardando coleta"
             ) {
               acumulador.operacao.aguardandoColeta += 1;
             }
 
             if (
-              coletaRealizada &&
-              !recebidaAds
+              statusOperacional ===
+              "coleta realizada"
             ) {
               acumulador.operacao.coletaRealizada += 1;
             }
 
-            if (recebidaAds) {
+            if (
+              statusOperacional ===
+                "recebido na ads" ||
+              statusOperacional ===
+                "finalizado"
+            ) {
               acumulador.operacao.recebidosAds += 1;
             }
 
@@ -335,6 +332,7 @@ export default function DashboardCards() {
       fundo: "bg-white",
       texto: "text-slate-900",
       faixa: "bg-slate-500",
+      filtro: "total",
     },
 
     {
@@ -345,6 +343,7 @@ export default function DashboardCards() {
       fundo: "bg-amber-50",
       texto: "text-amber-900",
       faixa: "bg-amber-500",
+      filtro: "aguardando-nf",
     },
 
     {
@@ -355,16 +354,18 @@ export default function DashboardCards() {
       fundo: "bg-orange-50",
       texto: "text-orange-900",
       faixa: "bg-orange-500",
+      filtro: "aguardando-coleta",
     },
 
     {
-      titulo: "Em transporte",
+      titulo: "Coleta realizada",
       valor: indicadores.operacao.coletaRealizada,
-      detalhe: "Resíduo em deslocamento",
+      detalhe: "Aguardando recebimento na ADS",
       borda: "border-blue-200",
       fundo: "bg-blue-50",
       texto: "text-blue-900",
       faixa: "bg-blue-500",
+      filtro: "coleta-realizada",
     },
 
     {
@@ -375,6 +376,7 @@ export default function DashboardCards() {
       fundo: "bg-emerald-50",
       texto: "text-emerald-900",
       faixa: "bg-emerald-500",
+      filtro: "recebidos-ads",
     },
   ];
 
@@ -385,6 +387,7 @@ export default function DashboardCards() {
   const transportadoras = [
     {
       titulo: "CT-es aguardando pagamento",
+      filtro: "cte-aguardando-pagamento",
       valor:
         indicadores.transportadoras
           .aguardandoPagamento,
@@ -398,6 +401,7 @@ export default function DashboardCards() {
 
     {
       titulo: "CT-es pagos",
+      filtro: "cte-pagos",
       valor: indicadores.transportadoras.pagos,
       detalhe: "Pagamentos concluídos",
 
@@ -409,6 +413,7 @@ export default function DashboardCards() {
 
     {
       titulo: "CT-es vencidos",
+      filtro: "cte-vencidos",
       valor: indicadores.transportadoras.vencidos,
       detalhe: "Necessitam de atenção",
 
@@ -426,6 +431,7 @@ export default function DashboardCards() {
   const financeiroAds = [
     {
       titulo: "NFs de cobrança emitidas",
+      filtro: "nf-ads-emitidas",
       valor: indicadores.financeiroAds.emitidas,
       detalhe: "Cobranças geradas pela ADS",
 
@@ -437,6 +443,7 @@ export default function DashboardCards() {
 
     {
       titulo: "Aguardando recebimento",
+      filtro: "nf-ads-aguardando",
       valor:
         indicadores.financeiroAds
           .aguardandoRecebimento,
@@ -450,6 +457,7 @@ export default function DashboardCards() {
 
     {
       titulo: "NFs pagas",
+      filtro: "nf-ads-pagas",
       valor: indicadores.financeiroAds.pagas,
       detalhe: "Recebimentos concluídos",
 
@@ -461,6 +469,7 @@ export default function DashboardCards() {
 
     {
       titulo: "NFs vencidas",
+      filtro: "nf-ads-vencidas",
       valor: indicadores.financeiroAds.vencidas,
       detalhe: "Cobranças em atraso",
 
@@ -474,6 +483,7 @@ export default function DashboardCards() {
   function renderizarCards(
     cards: {
       titulo: string;
+      filtro: string;
       valor: number;
       detalhe: string;
       borda: string;
@@ -486,18 +496,26 @@ export default function DashboardCards() {
     return (
       <div className={`grid gap-4 ${colunas}`}>
         {cards.map((card) => (
-          <article
+          <Link
             key={card.titulo}
-            className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${card.borda} ${card.fundo}`}
+            href={`/coletas?indicador=${encodeURIComponent(card.filtro)}`}
+            title={`Ver coletas: ${card.titulo}`}
+            className={`group relative block overflow-hidden rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${card.borda} ${card.fundo}`}
           >
             <div
               className={`absolute bottom-0 left-0 top-0 w-1.5 ${card.faixa}`}
             />
 
             <div className="pl-2">
-              <p className="text-sm font-semibold text-slate-600">
-                {card.titulo}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-600">
+                  {card.titulo}
+                </p>
+
+                <span className="text-xs font-bold text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600">
+                  Ver →
+                </span>
+              </div>
 
               <p
                 className={`mt-2 text-3xl font-bold ${card.texto}`}
@@ -514,7 +532,7 @@ export default function DashboardCards() {
                 {card.detalhe}
               </p>
             </div>
-          </article>
+          </Link>
         ))}
       </div>
     );

@@ -435,42 +435,53 @@ export default function DashboardExecutivo() {
       )}
 
       {/* CENTRO DE INTELIGÊNCIA */}
-      <article className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-950 text-white shadow-lg shadow-slate-900/10">
-        <div className="h-1 bg-emerald-500" />
+      <article className="relative overflow-hidden rounded-[28px] border border-slate-800/90 bg-slate-950 text-white shadow-xl shadow-slate-950/10">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute -left-20 bottom-0 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" />
 
-        <div className="grid gap-8 p-6 lg:grid-cols-[1.35fr_1fr] lg:p-7">
+        <div className="relative grid gap-8 p-6 lg:grid-cols-[1.2fr_1fr] lg:p-8">
           <div className="flex flex-col justify-between">
             <div>
-              <div className="mb-4 flex items-center gap-2">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
 
-                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-400">
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300">
                   Centro de Inteligência Operacional
                 </p>
               </div>
 
-              <h3 className="text-2xl font-black tracking-tight md:text-[28px]">
-                Visão executiva da operação
+              <h3 className="max-w-2xl text-2xl font-black tracking-tight md:text-[30px]">
+                Central de Controle Operacional
               </h3>
 
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
-                {carregando
-                  ? "Analisando os dados operacionais e financeiros..."
-                  : mensagemExecutiva}
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                Acompanhe em tempo real o andamento das coletas,
+                faturamentos, pagamentos e recebimentos da operação.
               </p>
+
+              <div className="mt-4 flex max-w-2xl items-start gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-3">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+
+                <p className="text-xs leading-5 text-slate-400">
+                  {carregando
+                    ? "Analisando os dados operacionais e financeiros..."
+                    : mensagemExecutiva}
+                </p>
+              </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <Link
                 href="/alertas"
-                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500"
+                className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-400 hover:shadow-md"
               >
                 Central de Alertas
               </Link>
 
               <Link
                 href="/coletas"
-                className="rounded-xl border border-slate-700 bg-slate-900/80 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-slate-600 hover:bg-slate-800"
+                className="rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:-translate-y-0.5 hover:border-slate-600 hover:bg-slate-800"
               >
                 Todas as coletas
               </Link>
@@ -572,7 +583,7 @@ export default function DashboardExecutivo() {
 
       {/* OPERAÇÃO + FINANCEIRO */}
       <div className="grid gap-5 xl:grid-cols-2">
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
           <CabecalhoSecao
             categoria="Agenda operacional"
             titulo="Próximas coletas"
@@ -599,7 +610,7 @@ export default function DashboardExecutivo() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
           <CabecalhoSecao
             categoria="Resumo financeiro"
             titulo="Pagamentos e recebimentos"
@@ -735,19 +746,27 @@ function ResumoEscuro({
   marcador: string;
 }) {
   return (
-    <div className="group rounded-2xl border border-slate-800 bg-slate-900/90 p-4 transition hover:border-slate-700">
-      <div className="flex items-center gap-2">
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${marcador}`}
-        />
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-900">
+      <div className="absolute inset-x-4 top-0 h-px bg-slate-700/70" />
 
-        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          {titulo}
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${marcador}`}
+          />
+
+          <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            {titulo}
+          </p>
+        </div>
+
+        <span className="text-[10px] font-semibold text-slate-600">
+          •
+        </span>
       </div>
 
       <p
-        className={`mt-2 text-xl font-black tracking-tight ${classe}`}
+        className={`mt-3 text-xl font-black tracking-tight ${classe}`}
       >
         {carregando ? "..." : valor}
       </p>
@@ -774,7 +793,7 @@ function Kpi({
 }) {
   return (
     <article
-      className={`relative overflow-hidden rounded-[20px] border p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${classe}`}
+      className={`relative overflow-hidden rounded-[22px] border p-5 shadow-sm shadow-slate-200/50 transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${classe}`}
     >
       <div
         className={`absolute left-0 top-0 h-full w-1 ${marcador}`}

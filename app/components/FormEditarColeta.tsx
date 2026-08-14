@@ -806,93 +806,6 @@ export default function FormEditarColeta({ id }: { id: number }) {
         </div>
       )}
 
-      <div id="resumo" className="scroll-mt-28">
-      <details className="group" open>
-        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
-          Resumo inteligente da coleta
-        </summary>
-
-        <PainelInteligenteColeta
-        numeroOv={coleta.numero_ov}
-        cliente={coleta.cliente}
-        loja={coleta.loja}
-        cidade={coleta.cidade}
-        estado={coleta.estado}
-        status={coleta.status}
-        dataSolicitacao={coleta.data_solicitacao}
-        dataNf={coleta.data_nf}
-        numeroNf={coleta.numero_nf}
-        transportadora={coleta.transportadora}
-        dataEnvioTransportadora={coleta.data_envio_transportadora}
-        dataPrevistaColeta={coleta.data_prevista_coleta}
-        dataEfetivaColeta={
-          coleta.data_efetiva_coleta ?? coleta.data_coleta
-        }
-        conhecimento={coleta.conhecimento}
-        dataChegadaAds={coleta.data_chegada_ads}
-        destino={coleta.destino}
-        statusPagamentoTransportadora={
-          coleta.status_pagamento_transportadora
-        }
-        vencimentoTransportadora={coleta.vencimento_transportadora}
-        dataPagamentoTransportadora={
-          coleta.data_pagamento_transportadora
-        }
-        statusRecebimentoAds={coleta.status_recebimento_ads}
-        vencimentoNfCobrancaAds={coleta.vencimento_nf_cobranca_ads}
-        dataRecebimentoPagamentoAds={
-          coleta.data_recebimento_pagamento_ads
-        }
-      />
-      </details>
-      </div>
-
-      <div id="timeline" className="scroll-mt-28">
-      <details className="group">
-        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
-          Timeline da coleta
-        </summary>
-
-        <TimelineColeta
-        dataSolicitacao={coleta.data_solicitacao}
-        dataOv={coleta.data_ov}
-        numeroOv={coleta.numero_ov}
-        dataNf={coleta.data_nf}
-        numeroNf={coleta.numero_nf}
-        transportadora={coleta.transportadora}
-        dataEnvioTransportadora={coleta.data_envio_transportadora}
-        dataEfetivaColeta={
-          coleta.data_efetiva_coleta ?? coleta.data_coleta
-        }
-        conhecimento={coleta.conhecimento}
-        dataChegadaAds={coleta.data_chegada_ads}
-        statusPagamentoTransportadora={
-          coleta.status_pagamento_transportadora
-        }
-        dataPagamentoTransportadora={
-          coleta.data_pagamento_transportadora
-        }
-        statusRecebimentoAds={coleta.status_recebimento_ads}
-        dataRecebimentoPagamentoAds={
-          coleta.data_recebimento_pagamento_ads
-        }
-      />
-      </details>
-      </div>
-
-      <div id="historico" className="scroll-mt-28">
-      <details className="group">
-        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
-          Histórico da coleta
-        </summary>
-
-        <HistoricoColeta
-        coletaId={id}
-        atualizarEm={atualizarHistorico}
-      />
-      </details>
-      </div>
-
       <div className="sticky top-3 z-50 mb-3 rounded-2xl border border-slate-200 bg-slate-950/95 p-3 text-white shadow-xl backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
@@ -990,6 +903,93 @@ export default function FormEditarColeta({ id }: { id: number }) {
             Histórico
           </button>
         </div>
+      </div>
+
+      <div id="resumo" className="scroll-mt-28">
+      <details className="group" open>
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Resumo inteligente da coleta
+        </summary>
+
+        <PainelInteligenteColeta
+        numeroOv={coleta.numero_ov}
+        cliente={coleta.cliente}
+        loja={coleta.loja}
+        cidade={coleta.cidade}
+        estado={coleta.estado}
+        status={coleta.status}
+        dataSolicitacao={coleta.data_solicitacao}
+        dataNf={coleta.data_nf}
+        numeroNf={coleta.numero_nf}
+        transportadora={coleta.transportadora}
+        dataEnvioTransportadora={coleta.data_envio_transportadora}
+        dataPrevistaColeta={coleta.data_prevista_coleta}
+        dataEfetivaColeta={
+          coleta.data_efetiva_coleta ?? coleta.data_coleta
+        }
+        conhecimento={coleta.conhecimento}
+        dataChegadaAds={coleta.data_chegada_ads}
+        destino={coleta.destino}
+        statusPagamentoTransportadora={
+          coleta.status_pagamento_transportadora
+        }
+        vencimentoTransportadora={coleta.vencimento_transportadora}
+        dataPagamentoTransportadora={
+          coleta.data_pagamento_transportadora
+        }
+        statusRecebimentoAds={coleta.status_recebimento_ads}
+        vencimentoNfCobrancaAds={coleta.vencimento_nf_cobranca_ads}
+        dataRecebimentoPagamentoAds={
+          coleta.data_recebimento_pagamento_ads
+        }
+      />
+      </details>
+      </div>
+
+      <div id="timeline" className="scroll-mt-28">
+      <details className="group">
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Timeline da coleta
+        </summary>
+
+        <TimelineColeta
+        dataSolicitacao={coleta.data_solicitacao}
+        dataOv={coleta.data_ov}
+        numeroOv={coleta.numero_ov}
+        dataNf={coleta.data_nf}
+        numeroNf={coleta.numero_nf}
+        transportadora={coleta.transportadora}
+        dataEnvioTransportadora={coleta.data_envio_transportadora}
+        dataEfetivaColeta={
+          coleta.data_efetiva_coleta ?? coleta.data_coleta
+        }
+        conhecimento={coleta.conhecimento}
+        dataChegadaAds={coleta.data_chegada_ads}
+        statusPagamentoTransportadora={
+          coleta.status_pagamento_transportadora
+        }
+        dataPagamentoTransportadora={
+          coleta.data_pagamento_transportadora
+        }
+        statusRecebimentoAds={coleta.status_recebimento_ads}
+        dataRecebimentoPagamentoAds={
+          coleta.data_recebimento_pagamento_ads
+        }
+      />
+      </details>
+      </div>
+
+      <div id="historico" className="scroll-mt-28">
+      <details className="group">
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Histórico da coleta
+        </summary>
+
+        <HistoricoColeta
+        coletaId={id}
+        atualizarEm={atualizarHistorico}
+      />
+      </details>
       </div>
 
       <nav className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
