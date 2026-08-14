@@ -122,15 +122,25 @@ export default function AlertasOperacionais() {
 
     coletas.forEach((coleta) => {
       const status = normalizarTexto(coleta.status);
+
       const referencia =
-        coleta.numero_ov || coleta.cliente || `Coleta #${coleta.id}`;
+        coleta.numero_ov ||
+        coleta.cliente ||
+        `Coleta #${coleta.id}`;
 
       if (estaFinalizada(status)) {
         return;
       }
 
-      if (coleta.data_prevista_coleta && !coleta.data_coleta) {
-        const dataPrevista = criarDataLocal(coleta.data_prevista_coleta);
+      // CRÍTICO: coleta com data prevista vencida
+      if (
+        coleta.data_prevista_coleta &&
+        !coleta.data_coleta
+      ) {
+        const dataPrevista = criarDataLocal(
+          coleta.data_prevista_coleta,
+        );
+
         dataPrevista.setHours(0, 0, 0, 0);
 
         if (dataPrevista < hoje) {
@@ -143,7 +153,8 @@ export default function AlertasOperacionais() {
             )} e coleta ainda não realizada.`,
             referencia,
             prioridade: 1,
-            classes: "border-red-200 bg-red-50 text-red-800",
+            classes:
+              "border-red-200 bg-red-50 text-red-800",
             marcador: "bg-red-500",
           });
 
@@ -151,6 +162,7 @@ export default function AlertasOperacionais() {
         }
       }
 
+      // INFORMAÇÃO FALTANTE: Nota Fiscal
       if (
         status === "aguardando nf" ||
         status === "aguardando nota fiscal" ||
@@ -160,53 +172,69 @@ export default function AlertasOperacionais() {
           id: `nf-${coleta.id}`,
           coletaId: coleta.id,
           titulo: "Aguardando nota fiscal",
-          descricao: "A nota fiscal ainda não foi registrada.",
+          descricao:
+            "A nota fiscal ainda não foi registrada.",
           referencia,
           prioridade: 2,
-          classes: "border-amber-200 bg-amber-50 text-amber-800",
+          classes:
+            "border-amber-200 bg-amber-50 text-amber-800",
           marcador: "bg-amber-500",
         });
 
         return;
       }
 
+      // INFORMAÇÃO FALTANTE: Transportadora
       if (!coleta.transportadora) {
         resultado.push({
           id: `transportadora-${coleta.id}`,
           coletaId: coleta.id,
           titulo: "Transportadora não definida",
-          descricao: "É necessário selecionar a transportadora responsável.",
+          descricao:
+            "É necessário selecionar a transportadora responsável.",
           referencia,
           prioridade: 3,
-          classes: "border-violet-200 bg-violet-50 text-violet-800",
-          marcador: "bg-violet-500",
+          classes:
+            "border-amber-200 bg-amber-50 text-amber-800",
+          marcador: "bg-amber-500",
         });
 
         return;
       }
 
+      // PENDÊNCIA OPERACIONAL: aguardando coleta
       if (
         status === "aguardando coleta" ||
         status === "coleta solicitada" ||
         status === "aguardando transportadora" ||
         status === "solicitado a transportadora"
       ) {
+        const semDataPrevista =
+          !coleta.data_prevista_coleta;
+
         resultado.push({
           id: `coleta-${coleta.id}`,
           coletaId: coleta.id,
           titulo: "Aguardando realização da coleta",
-          descricao: `Data prevista: ${formatarData(
-            coleta.data_prevista_coleta,
-          )}.`,
+          descricao: semDataPrevista
+            ? "Data prevista ainda não informada."
+            : `Data prevista: ${formatarData(
+                coleta.data_prevista_coleta,
+              )}.`,
           referencia,
-          prioridade: 4,
-          classes: "border-violet-200 bg-violet-50 text-violet-800",
-          marcador: "bg-violet-500",
+          prioridade: semDataPrevista ? 3 : 4,
+          classes: semDataPrevista
+            ? "border-orange-300 bg-orange-100 text-orange-900"
+            : "border-orange-200 bg-orange-50 text-orange-800",
+          marcador: semDataPrevista
+            ? "bg-orange-600"
+            : "bg-orange-500",
         });
 
         return;
       }
 
+      // INFORMAÇÃO: em transporte
       if (
         status === "em transporte" ||
         status === "em transito" ||
@@ -216,32 +244,43 @@ export default function AlertasOperacionais() {
           id: `transporte-${coleta.id}`,
           coletaId: coleta.id,
           titulo: "Coleta em transporte",
-          descricao: "Carga coletada e ainda não recebida na ADS.",
+          descricao:
+            "Carga coletada e ainda não recebida na ADS.",
           referencia,
           prioridade: 5,
-          classes: "border-blue-200 bg-blue-50 text-blue-800",
+          classes:
+            "border-blue-200 bg-blue-50 text-blue-800",
           marcador: "bg-blue-500",
         });
 
         return;
       }
 
-      if (!coleta.data_prevista_coleta && !coleta.data_coleta) {
+      // INFORMAÇÃO FALTANTE: data prevista
+      if (
+        !coleta.data_prevista_coleta &&
+        !coleta.data_coleta
+      ) {
         resultado.push({
           id: `data-${coleta.id}`,
           coletaId: coleta.id,
           titulo: "Data da coleta não informada",
-          descricao: "Cadastre uma data prevista para acompanhamento.",
+          descricao:
+            "Cadastre uma data prevista para acompanhamento.",
           referencia,
           prioridade: 6,
-          classes: "border-slate-200 bg-slate-50 text-slate-700",
-          marcador: "bg-slate-500",
+          classes:
+            "border-amber-200 bg-amber-50 text-amber-800",
+          marcador: "bg-amber-500",
         });
       }
     });
 
     return resultado
-      .sort((a, b) => a.prioridade - b.prioridade)
+      .sort(
+        (a, b) =>
+          a.prioridade - b.prioridade,
+      )
       .slice(0, 6);
   }, [coletas]);
 
@@ -277,44 +316,49 @@ export default function AlertasOperacionais() {
         </div>
       )}
 
-      {!carregando && !erro && alertas.length === 0 && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-          <p className="font-semibold text-emerald-800">
-            Operação sem pendências críticas
-          </p>
+      {!carregando &&
+        !erro &&
+        alertas.length === 0 && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+            <p className="font-semibold text-emerald-800">
+              Operação sem pendências críticas
+            </p>
 
-          <p className="mt-1 text-sm text-emerald-700">
-            Nenhum alerta operacional foi identificado neste momento.
-          </p>
-        </div>
-      )}
+            <p className="mt-1 text-sm text-emerald-700">
+              Nenhum alerta operacional foi identificado neste momento.
+            </p>
+          </div>
+        )}
 
-      {!carregando && alertas.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {alertas.map((alerta) => (
-            <article
-              key={alerta.id}
-              className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm ${alerta.classes}`}
-            >
-              <div
-                className={`absolute bottom-0 left-0 top-0 w-1.5 ${alerta.marcador}`}
-              />
+      {!carregando &&
+        alertas.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {alertas.map((alerta) => (
+              <article
+                key={alerta.id}
+                className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${alerta.classes}`}
+              >
+                <div
+                  className={`absolute bottom-0 left-0 top-0 w-1.5 ${alerta.marcador}`}
+                />
 
-              <div className="pl-2">
-                <p className="text-xs font-bold uppercase tracking-wide opacity-70">
-                  {alerta.referencia}
-                </p>
+                <div className="pl-2">
+                  <p className="text-xs font-bold uppercase tracking-wide opacity-70">
+                    {alerta.referencia}
+                  </p>
 
-                <h4 className="mt-2 font-bold">{alerta.titulo}</h4>
+                  <h4 className="mt-2 font-bold">
+                    {alerta.titulo}
+                  </h4>
 
-                <p className="mt-1 text-sm opacity-80">
-                  {alerta.descricao}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
+                  <p className="mt-1 text-sm opacity-80">
+                    {alerta.descricao}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
     </section>
   );
 }

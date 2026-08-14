@@ -18,7 +18,8 @@ function obterNomeUsuario(
     return nomeMetadata.trim();
   }
 
-  const parteEmail = email.split("@")[0] ?? "Usuário";
+  const parteEmail =
+    email.split("@")[0] ?? "Usuário";
 
   return parteEmail
     .replace(/[._-]+/g, " ")
@@ -30,6 +31,16 @@ function obterNomeUsuario(
         palavra.slice(1).toLowerCase(),
     )
     .join(" ");
+}
+
+function obterIniciais(nome: string) {
+  return nome
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((parte) => parte.charAt(0))
+    .join("")
+    .toUpperCase();
 }
 
 export default function Header() {
@@ -50,10 +61,9 @@ export default function Header() {
       } = await supabase.auth.getUser();
 
       if (error) {
-        // Na tela de login ainda não existe sessão.
-        // Não tratar isso como erro.
         if (
-          error.name === "AuthSessionMissingError"
+          error.name ===
+          "AuthSessionMissingError"
         ) {
           setUsuario(null);
           setCarregando(false);
@@ -130,76 +140,86 @@ export default function Header() {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4">
+      <div className="mx-auto flex h-[82px] max-w-[1600px] items-center justify-between px-6">
 
-        <div className="flex items-center gap-5">
-          <Image
-            src="/logo-ads.png"
-            alt="ADS"
-            width={150}
-            height={60}
-            priority
-          />
+        {/* MARCA */}
+        <div className="flex min-w-0 items-center gap-5">
+          <div className="flex shrink-0 items-center">
+            <Image
+              src="/logo-ads.png"
+              alt="ADS Logística Ambiental"
+              width={132}
+              height={53}
+              priority
+              className="h-auto w-[132px] object-contain"
+            />
+          </div>
+
+          <div className="hidden h-10 w-px bg-slate-200 sm:block" />
 
           <div className="hidden min-w-0 sm:block">
-            <h1 className="truncate text-xl font-bold text-slate-900">
+            <h1 className="truncate text-[19px] font-bold tracking-tight text-slate-900">
               ADS Controle de Coletas
             </h1>
 
-            <p className="text-sm text-slate-500">
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
               Sistema de Gestão Operacional
             </p>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-4">
-          <div className="hidden text-right md:block">
+        {/* USUÁRIO */}
+        <div className="flex shrink-0 items-center gap-3">
 
-            {carregando ? (
-              <>
-                <p className="text-sm font-semibold text-slate-500">
-                  Carregando usuário...
-                </p>
+          {carregando ? (
+            <div className="hidden rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-right md:block">
+              <p className="text-xs font-semibold text-slate-500">
+                Carregando usuário...
+              </p>
 
-                <p className="text-xs text-slate-400">
-                  Aguarde
-                </p>
-              </>
-            ) : usuario ? (
-              <>
-                <div className="flex items-center justify-end gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                Aguarde
+              </p>
+            </div>
+          ) : usuario ? (
+            <div className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2 md:flex">
 
-                  <p className="text-sm font-semibold text-slate-900">
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-white">
+                {obterIniciais(usuario.nome)}
+
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
+              </div>
+
+              <div className="min-w-0 pr-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-bold text-slate-900">
                     {usuario.nome}
                   </p>
                 </div>
 
-                <p className="mt-1 max-w-64 truncate text-xs text-slate-500">
+                <p className="max-w-56 truncate text-[11px] text-slate-500">
                   {usuario.email}
                 </p>
 
-                <p className="mt-1 text-xs font-medium text-emerald-700">
+                <p className="mt-0.5 text-[10px] font-semibold text-emerald-700">
                   Gestor Operacional • Online
                 </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-semibold text-slate-900">
-                  Usuário
-                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="hidden rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-right md:block">
+              <p className="text-sm font-semibold text-slate-900">
+                Usuário
+              </p>
 
-                <p className="text-xs text-slate-500">
-                  Sessão não identificada
-                </p>
-              </>
-            )}
-
-          </div>
+              <p className="text-xs text-slate-500">
+                Sessão não identificada
+              </p>
+            </div>
+          )}
 
           <BotaoSair />
         </div>
-
       </div>
     </header>
   );

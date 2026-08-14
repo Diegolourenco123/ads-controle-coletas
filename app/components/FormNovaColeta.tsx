@@ -47,13 +47,13 @@ type TransportadoraMestre = {
 };
 
 const campo =
-  "mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
+  "mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
 
 const rotulo =
   "text-sm font-semibold text-slate-700";
 
 const campoArquivo =
-  "mt-2 block w-full cursor-pointer rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-700 hover:file:bg-emerald-100";
+  "mt-2 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200";
 
 const BUCKET_DOCUMENTOS = "documentos-coletas";
 const LIMITE_ARQUIVO = 10 * 1024 * 1024;
@@ -214,6 +214,9 @@ export default function FormNovaColeta() {
   const autocompleteUnidadeRef =
     useRef<HTMLDivElement>(null);
 
+  const autocompleteTransportadoraRef =
+    useRef<HTMLDivElement>(null);
+
   const [clientes, setClientes] = useState<
     ClienteMestre[]
   >([]);
@@ -249,6 +252,26 @@ export default function FormNovaColeta() {
     transportadoras,
     setTransportadoras,
   ] = useState<TransportadoraMestre[]>([]);
+
+  const [
+    buscaTransportadora,
+    setBuscaTransportadora,
+  ] = useState("");
+
+  const [
+    transportadoraSelecionada,
+    setTransportadoraSelecionada,
+  ] = useState<TransportadoraMestre | null>(null);
+
+  const [
+    listaTransportadorasAberta,
+    setListaTransportadorasAberta,
+  ] = useState(false);
+
+  const [
+    filialTodoBrasilSugerida,
+    setFilialTodoBrasilSugerida,
+  ] = useState<TransportadoraMestre | null>(null);
 
   const [
     carregandoCadastros,
@@ -389,6 +412,15 @@ export default function FormNovaColeta() {
       ) {
         setListaUnidadesAberta(false);
       }
+
+      if (
+        autocompleteTransportadoraRef.current &&
+        !autocompleteTransportadoraRef.current.contains(
+          alvo,
+        )
+      ) {
+        setListaTransportadorasAberta(false);
+      }
     }
 
     document.addEventListener(
@@ -419,6 +451,123 @@ export default function FormNovaColeta() {
     if (campoFormulario) {
       campoFormulario.value =
         valor ?? "";
+    }
+  }
+
+  function aplicarTransportadoraPorNome(
+    nomeTransportadora: string | null | undefined,
+  ) {
+    const nome = nomeTransportadora?.trim() ?? "";
+
+    const transportadoraEncontrada =
+      nome
+        ? transportadoras.find(
+            (transportadora) =>
+              normalizarTexto(transportadora.nome) ===
+              normalizarTexto(nome),
+          ) ?? null
+        : null;
+
+    preencherCampo(
+      "transportadora",
+      transportadoraEncontrada?.nome ?? nome,
+    );
+
+    setTransportadoraSelecionada(
+      transportadoraEncontrada,
+    );
+
+    setBuscaTransportadora(
+      transportadoraEncontrada?.nome ?? nome,
+    );
+
+    setListaTransportadorasAberta(false);
+
+    if (!nome) {
+      preencherCampo("contatoTransportadora", "");
+      preencherCampo("telefoneTransportadora", "");
+      preencherCampo("emailTransportadora", "");
+      return;
+    }
+
+    preencherCampo(
+      "contatoTransportadora",
+      transportadoraEncontrada?.contato ?? "",
+    );
+
+    preencherCampo(
+      "telefoneTransportadora",
+      transportadoraEncontrada?.telefone ?? "",
+    );
+
+    preencherCampo(
+      "emailTransportadora",
+      transportadoraEncontrada?.email ?? "",
+    );
+  }
+
+  function identificarFilialTodoBrasilPorEstado(
+    estado: string | null | undefined,
+  ) {
+    const uf = estado?.trim().toUpperCase() ?? "";
+
+    if (!uf) {
+      setFilialTodoBrasilSugerida(null);
+      return null;
+    }
+
+    const nomeFilial = `Todo Brasil - Filial ${uf}`;
+
+    const filialEncontrada =
+      transportadoras.find(
+        (transportadora) =>
+          normalizarTexto(transportadora.nome) ===
+          normalizarTexto(nomeFilial),
+      ) ?? null;
+
+    setFilialTodoBrasilSugerida(filialEncontrada);
+
+    return filialEncontrada;
+  }
+
+  function preencherFilialTodoBrasilSeNfCompleta() {
+    const formulario = formularioRef.current;
+
+    if (!formulario || !filialTodoBrasilSugerida) {
+      return;
+    }
+
+    const dataNf = (
+      formulario.elements.namedItem(
+        "dataNotaFiscal",
+      ) as HTMLInputElement | null
+    )?.value.trim();
+
+    const numeroNf = (
+      formulario.elements.namedItem(
+        "numeroNotaFiscal",
+      ) as HTMLInputElement | null
+    )?.value.trim();
+
+    if (dataNf && numeroNf) {
+      aplicarTransportadoraPorNome(
+        filialTodoBrasilSugerida.nome,
+      );
+    } else {
+      const transportadoraAtual = (
+        formulario.elements.namedItem(
+          "transportadora",
+        ) as HTMLSelectElement | null
+      )?.value.trim();
+
+      if (
+        transportadoraAtual &&
+        normalizarTexto(transportadoraAtual).startsWith(
+          "todo brasil - filial",
+        )
+      ) {
+        aplicarTransportadoraPorNome("");
+      }
     }
   }
 
@@ -528,42 +677,41 @@ export default function FormNovaColeta() {
       clienteSelecionado.responsavel,
     );
 
-    if (
-      clienteSelecionado.transportadora_padrao
-    ) {
-      preencherCampo(
-        "transportadora",
-        clienteSelecionado
-          .transportadora_padrao,
+    const nomeClienteSelecionado =
+      normalizarTexto(
+        nomeCliente(clienteSelecionado),
       );
 
-      const transportadoraPadrao =
-        transportadoras.find(
-          (transportadora) =>
-            normalizarTexto(
-              transportadora.nome,
-            ) ===
-            normalizarTexto(
-              clienteSelecionado
-                .transportadora_padrao ??
-                "",
-            ),
-        );
+    const transportadoraPadrao =
+      clienteSelecionado.transportadora_padrao?.trim() ??
+      "";
 
-      preencherCampo(
-        "contatoTransportadora",
-        transportadoraPadrao?.contato ?? "",
+    const transportadoraPadraoNormalizada =
+      normalizarTexto(transportadoraPadrao);
+
+    const ehTodoBrasil =
+      transportadoraPadraoNormalizada ===
+        "todo brasil" ||
+      transportadoraPadraoNormalizada.startsWith(
+        "todo brasil - filial",
       );
 
-      preencherCampo(
-        "telefoneTransportadora",
-        transportadoraPadrao?.telefone ?? "",
-      );
+    const ehAssai =
+      nomeClienteSelecionado.includes("assai");
 
-      preencherCampo(
-        "emailTransportadora",
-        transportadoraPadrao?.email ?? "",
+    setFilialTodoBrasilSugerida(null);
+
+    if (ehTodoBrasil || ehAssai) {
+      // Para a Todo Brasil, a filial só será sugerida após
+      // a escolha da unidade e só será preenchida quando
+      // Data da NF + Número da NF estiverem informados.
+      aplicarTransportadoraPorNome("");
+    } else if (transportadoraPadrao) {
+      aplicarTransportadoraPorNome(
+        transportadoraPadrao,
       );
+    } else {
+      aplicarTransportadoraPorNome("");
     }
 
     await carregarUnidades(
@@ -587,37 +735,93 @@ export default function FormNovaColeta() {
       "estado",
       unidade.estado,
     );
+
+    const clienteSelecionado =
+      clientes.find(
+        (cliente) =>
+          cliente.id === clienteSelecionadoId,
+      );
+
+    const transportadoraPadrao =
+      clienteSelecionado?.transportadora_padrao?.trim() ??
+      "";
+
+    const transportadoraPadraoNormalizada =
+      normalizarTexto(transportadoraPadrao);
+
+    const ehTodoBrasil =
+      transportadoraPadraoNormalizada ===
+        "todo brasil" ||
+      transportadoraPadraoNormalizada.startsWith(
+        "todo brasil - filial",
+      );
+
+    const ehAssai =
+      normalizarTexto(
+        clienteSelecionado
+          ? nomeCliente(clienteSelecionado)
+          : "",
+      ).includes("assai");
+
+    if (ehTodoBrasil || ehAssai) {
+      const filial =
+        identificarFilialTodoBrasilPorEstado(
+          unidade.estado,
+        );
+
+      if (!filial) {
+        aplicarTransportadoraPorNome("");
+        setTipoMensagem("erro");
+        setMensagem(
+          `Não encontrei a transportadora "Todo Brasil - Filial ${unidade.estado ?? ""}" cadastrada. Verifique o cadastro da filial.`,
+        );
+      } else {
+        // Mantém a transportadora vazia enquanto a NF estiver pendente.
+        aplicarTransportadoraPorNome("");
+        setMensagem("");
+      }
+    } else if (transportadoraPadrao) {
+      setFilialTodoBrasilSugerida(null);
+      aplicarTransportadoraPorNome(
+        transportadoraPadrao,
+      );
+    } else {
+      setFilialTodoBrasilSugerida(null);
+      aplicarTransportadoraPorNome("");
+    }
   }
 
   function selecionarTransportadora(
-    evento: React.ChangeEvent<HTMLSelectElement>,
+    transportadora: TransportadoraMestre,
   ) {
-    const transportadoraId =
-      Number(
-        evento.target
-          .selectedOptions[0]?.dataset.id,
-      );
+    setTransportadoraSelecionada(
+      transportadora,
+    );
 
-    const transportadoraSelecionada =
-      transportadoras.find(
-        (transportadora) =>
-          transportadora.id ===
-          transportadoraId,
-      );
+    setBuscaTransportadora(
+      transportadora.nome,
+    );
+
+    setListaTransportadorasAberta(false);
+
+    preencherCampo(
+      "transportadora",
+      transportadora.nome,
+    );
 
     preencherCampo(
       "contatoTransportadora",
-      transportadoraSelecionada?.contato ?? "",
+      transportadora.contato ?? "",
     );
 
     preencherCampo(
       "telefoneTransportadora",
-      transportadoraSelecionada?.telefone ?? "",
+      transportadora.telefone ?? "",
     );
 
     preencherCampo(
       "emailTransportadora",
-      transportadoraSelecionada?.email ?? "",
+      transportadora.email ?? "",
     );
   }
 
@@ -646,6 +850,33 @@ export default function FormNovaColeta() {
       );
     })
     .slice(0, 12);
+
+  const termoTransportadora =
+    normalizarTexto(buscaTransportadora);
+
+  const transportadorasFiltradas =
+    transportadoras
+      .filter((transportadora) => {
+        if (!termoTransportadora) {
+          return true;
+        }
+
+        const conteudo = normalizarTexto(
+          [
+            transportadora.nome,
+            transportadora.contato,
+            transportadora.telefone,
+            transportadora.email,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+
+        return conteudo.includes(
+          termoTransportadora,
+        );
+      })
+      .slice(0, 12);
 
   async function enviarDocumento(
     arquivo: File,
@@ -981,11 +1212,6 @@ export default function FormNovaColeta() {
           "dataPrevistaColeta",
         ),
 
-      protocolo_transportadora:
-        valorOuNulo(
-          "protocoloTransportadora",
-        ),
-
       contato_transportadora:
         valorOuNulo(
           "contatoTransportadora",
@@ -1147,6 +1373,10 @@ export default function FormNovaColeta() {
     setUnidadeSelecionada(null);
     setListaUnidadesAberta(false);
     setClienteSelecionadoId(null);
+    setFilialTodoBrasilSugerida(null);
+    setBuscaTransportadora("");
+    setTransportadoraSelecionada(null);
+    setListaTransportadorasAberta(false);
 
     setAbaAtiva("operacao");
 
@@ -1162,11 +1392,11 @@ export default function FormNovaColeta() {
     aba: Aba,
   ) {
     return [
-      "rounded-xl px-4 py-3 text-sm font-semibold transition",
+      "relative rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200",
 
       abaAtiva === aba
-        ? "bg-emerald-600 text-white shadow-sm"
-        : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+        ? "bg-slate-950 text-white shadow-sm ring-1 ring-slate-900"
+        : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
     ].join(" ");
   }
 
@@ -1192,24 +1422,24 @@ export default function FormNovaColeta() {
     <form
       ref={formularioRef}
       onSubmit={salvarColeta}
-      className="space-y-6"
+      className="space-y-5"
     >
       {mensagem && (
         <div
           role="status"
-          className={`rounded-2xl border p-4 text-sm font-medium ${classeMensagem()}`}
+          className={`rounded-2xl border px-5 py-4 text-sm font-semibold shadow-sm ${classeMensagem()}`}
         >
           {mensagem}
         </div>
       )}
 
       {erroCadastros && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-800 shadow-sm">
           {erroCadastros}
         </div>
       )}
 
-      <nav className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <nav className="rounded-[22px] border border-slate-200 bg-white p-2.5 shadow-sm shadow-slate-200/50">
         <div className="grid gap-3 md:grid-cols-3">
           <button
             type="button"
@@ -1264,13 +1494,13 @@ export default function FormNovaColeta() {
             : "hidden"
         }
       >
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 1
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Solicitação do cliente
             </h3>
 
@@ -1419,7 +1649,7 @@ export default function FormNovaColeta() {
               {listaUnidadesAberta &&
                 clienteSelecionadoId &&
                 !carregandoUnidades && (
-                  <div className="absolute z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                  <div className="absolute z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-2xl shadow-slate-900/10">
                     {unidadesFiltradas.length >
                     0 ? (
                       unidadesFiltradas.map(
@@ -1434,7 +1664,7 @@ export default function FormNovaColeta() {
                                 unidade,
                               )
                             }
-                            className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition last:border-b-0 hover:bg-emerald-50 hover:text-emerald-800"
+                            className="block w-full rounded-xl px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-800"
                           >
                             <span className="block font-semibold">
                               {
@@ -1509,6 +1739,52 @@ export default function FormNovaColeta() {
                 name="estado"
                 required
                 defaultValue=""
+                onChange={(evento) => {
+                  const clienteSelecionado =
+                    clientes.find(
+                      (cliente) =>
+                        cliente.id ===
+                        clienteSelecionadoId,
+                    );
+
+                  const transportadoraPadrao =
+                    clienteSelecionado
+                      ?.transportadora_padrao
+                      ?.trim() ?? "";
+
+                  const transportadoraPadraoNormalizada =
+                    normalizarTexto(
+                      transportadoraPadrao,
+                    );
+
+                  const ehTodoBrasil =
+                    transportadoraPadraoNormalizada ===
+                      "todo brasil" ||
+                    transportadoraPadraoNormalizada.startsWith(
+                      "todo brasil - filial",
+                    );
+
+                  const ehAssai =
+                    normalizarTexto(
+                      clienteSelecionado
+                        ? nomeCliente(
+                            clienteSelecionado,
+                          )
+                        : "",
+                    ).includes("assai");
+
+                  if (ehTodoBrasil || ehAssai) {
+                    const filial =
+                      identificarFilialTodoBrasilPorEstado(
+                        evento.target.value,
+                      );
+
+                    if (filial) {
+                      aplicarTransportadoraPorNome("");
+                      setMensagem("");
+                    }
+                  }
+                }}
                 className={
                   campo
                 }
@@ -1559,13 +1835,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 2
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Ordem de Visita e Nota Fiscal
             </h3>
 
@@ -1577,21 +1853,19 @@ export default function FormNovaColeta() {
 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <label className={rotulo}>
-              Data da OV *
+              Data da OV
               <input
                 type="date"
                 name="dataOv"
-                required
                 className={campo}
               />
             </label>
 
             <label className={rotulo}>
-              Número da OV *
+              Número da OV
               <input
                 type="text"
                 name="numeroOv"
-                required
                 placeholder="Ex.: OV-1026"
                 className={campo}
               />
@@ -1602,6 +1876,12 @@ export default function FormNovaColeta() {
               <input
                 type="date"
                 name="dataNotaFiscal"
+                onChange={() => {
+                  setTimeout(
+                    preencherFilialTodoBrasilSeNfCompleta,
+                    0,
+                  );
+                }}
                 className={campo}
               />
             </label>
@@ -1611,6 +1891,12 @@ export default function FormNovaColeta() {
               <input
                 type="text"
                 name="numeroNotaFiscal"
+                onChange={() => {
+                  setTimeout(
+                    preencherFilialTodoBrasilSeNfCompleta,
+                    0,
+                  );
+                }}
                 placeholder="Ex.: 45880"
                 className={campo}
               />
@@ -1631,13 +1917,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 3
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Solicitação à transportadora
             </h3>
 
@@ -1649,48 +1935,139 @@ export default function FormNovaColeta() {
 
           <div className="space-y-6">
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-              <label className={`${rotulo} xl:col-span-2`}>
-                Transportadora
-                <select
-                  name="transportadora"
-                  defaultValue=""
-                  disabled={
-                    carregandoCadastros
-                  }
-                  onChange={
-                    selecionarTransportadora
-                  }
-                  className={campo}
-                >
-                  <option value="">
-                    {carregandoCadastros
-                      ? "Carregando transportadoras..."
-                      : "Selecione a transportadora"}
-                  </option>
+              <div
+                ref={autocompleteTransportadoraRef}
+                className="relative xl:col-span-2"
+              >
+                <label className={rotulo}>
+                  Transportadora
+                </label>
 
-                  {transportadoras.map(
-                    (
-                      transportadora,
-                    ) => (
-                      <option
-                        key={
-                          transportadora.id
-                        }
-                        value={
-                          transportadora.nome
-                        }
-                        data-id={
-                          transportadora.id
-                        }
-                      >
-                        {
-                          transportadora.nome
-                        }
-                      </option>
-                    ),
+                <input
+                  type="hidden"
+                  name="transportadora"
+                  value={
+                    transportadoraSelecionada?.nome ??
+                    buscaTransportadora
+                  }
+                />
+
+                <input
+                  type="text"
+                  value={buscaTransportadora}
+                  disabled={carregandoCadastros}
+                  onFocus={() => {
+                    if (!carregandoCadastros) {
+                      setListaTransportadorasAberta(
+                        true,
+                      );
+                    }
+                  }}
+                  onChange={(evento) => {
+                    setBuscaTransportadora(
+                      evento.target.value,
+                    );
+
+                    setTransportadoraSelecionada(
+                      null,
+                    );
+
+                    preencherCampo(
+                      "transportadora",
+                      evento.target.value,
+                    );
+
+                    preencherCampo(
+                      "contatoTransportadora",
+                      "",
+                    );
+
+                    preencherCampo(
+                      "telefoneTransportadora",
+                      "",
+                    );
+
+                    preencherCampo(
+                      "emailTransportadora",
+                      "",
+                    );
+
+                    setListaTransportadorasAberta(
+                      true,
+                    );
+                  }}
+                  placeholder={
+                    carregandoCadastros
+                      ? "Carregando transportadoras..."
+                      : "Digite para buscar a transportadora"
+                  }
+                  autoComplete="off"
+                  className={campo}
+                />
+
+                {listaTransportadorasAberta &&
+                  !carregandoCadastros && (
+                    <div className="absolute z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-2xl shadow-slate-900/10">
+                      {transportadorasFiltradas.length >
+                      0 ? (
+                        transportadorasFiltradas.map(
+                          (transportadora) => (
+                            <button
+                              key={transportadora.id}
+                              type="button"
+                              onClick={() =>
+                                selecionarTransportadora(
+                                  transportadora,
+                                )
+                              }
+                              className="block w-full rounded-xl px-4 py-3 text-left transition hover:bg-emerald-50"
+                            >
+                              <span className="block text-sm font-semibold text-slate-800">
+                                {transportadora.nome}
+                              </span>
+
+                              {(transportadora.contato ||
+                                transportadora.email) && (
+                                <span className="mt-1 block text-xs text-slate-500">
+                                  {[
+                                    transportadora.contato,
+                                    transportadora.email,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" • ")}
+                                </span>
+                              )}
+                            </button>
+                          ),
+                        )
+                      ) : (
+                        <div className="px-4 py-4 text-sm text-slate-500">
+                          Nenhuma transportadora
+                          encontrada para esta pesquisa.
+                        </div>
+                      )}
+
+                      {transportadoras.length > 12 &&
+                        !termoTransportadora && (
+                          <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+                            Digite o nome, contato ou
+                            e-mail para filtrar as{" "}
+                            {transportadoras.length}{" "}
+                            transportadoras.
+                          </div>
+                        )}
+                    </div>
                   )}
-                </select>
-              </label>
+
+                {filialTodoBrasilSugerida && (
+                  <span className="mt-2 block text-xs font-medium text-blue-600">
+                    Filial sugerida pela UF:{" "}
+                    {filialTodoBrasilSugerida.nome}. Ela será
+                    preenchida automaticamente após informar
+                    Data da NF e Número da NF.
+                  </span>
+                )}
+              </div>
 
               <label className={rotulo}>
                 Data da solicitação à transportadora
@@ -1743,18 +2120,8 @@ export default function FormNovaColeta() {
               </label>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <label className={rotulo}>
-                Protocolo da solicitação
-                <input
-                  type="text"
-                  name="protocoloTransportadora"
-                  placeholder="Protocolo ou referência"
-                  className={campo}
-                />
-              </label>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
                 <p className="text-sm font-semibold text-emerald-800">
                   Status operacional automático
                 </p>
@@ -1769,13 +2136,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapas 4 e 5
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Coleta realizada e recebimento na ADS
             </h3>
 
@@ -1861,7 +2228,7 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <label className={rotulo}>
             Observações operacionais
             <textarea
@@ -1881,13 +2248,13 @@ export default function FormNovaColeta() {
             : "hidden"
         }
       >
-        <article className="rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
               Financeiro — Transportadora
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Pagamento do frete e do CT-e
             </h3>
 
@@ -1968,7 +2335,7 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <label className={rotulo}>
             Observações do pagamento da transportadora
             <textarea
@@ -1988,13 +2355,13 @@ export default function FormNovaColeta() {
             : "hidden"
         }
       >
-        <article className="rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <div className="mb-6">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
               Financeiro — ADS
             </p>
 
-            <h3 className="mt-1 text-lg font-bold">
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
               Nota Fiscal de cobrança ao cliente
             </h3>
 
@@ -2102,7 +2469,7 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
           <label className={rotulo}>
             Observações da cobrança ADS
             <textarea
@@ -2115,10 +2482,10 @@ export default function FormNovaColeta() {
         </article>
       </div>
 
-      <div className="flex flex-col-reverse justify-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+      <div className="sticky bottom-4 z-30 flex flex-col-reverse justify-end gap-3 rounded-[22px] border border-slate-200 bg-white/95 p-4 shadow-lg shadow-slate-900/10 backdrop-blur sm:flex-row">
         <Link
           href="/"
-          className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
         >
           Cancelar
         </Link>
@@ -2133,9 +2500,13 @@ export default function FormNovaColeta() {
             setUnidadeSelecionada(null);
             setListaUnidadesAberta(false);
             setClienteSelecionadoId(null);
+            setFilialTodoBrasilSugerida(null);
+            setBuscaTransportadora("");
+            setTransportadoraSelecionada(null);
+            setListaTransportadorasAberta(false);
           }}
           disabled={salvando}
-          className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Limpar formulário
         </button>
@@ -2143,7 +2514,7 @@ export default function FormNovaColeta() {
         <button
           type="submit"
           disabled={salvando}
-          className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-emerald-600 px-7 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
         >
           {salvando
             ? "Salvando..."

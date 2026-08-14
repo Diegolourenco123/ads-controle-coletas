@@ -83,15 +83,25 @@ function dataVencida(data: string | null) {
   hoje.setHours(0, 0, 0, 0);
 
   const [ano, mes, dia] = data.split("-").map(Number);
-  const vencimento = new Date(ano, mes - 1, dia);
+
+  const vencimento = new Date(
+    ano,
+    mes - 1,
+    dia,
+  );
+
   vencimento.setHours(0, 0, 0, 0);
 
   return vencimento < hoje;
 }
 
 export default function DashboardCards() {
-  const [indicadores, setIndicadores] = useState<Indicadores>(inicial);
-  const [carregando, setCarregando] = useState(true);
+  const [indicadores, setIndicadores] =
+    useState<Indicadores>(inicial);
+
+  const [carregando, setCarregando] =
+    useState(true);
+
   const [erro, setErro] = useState("");
 
   useEffect(() => {
@@ -99,129 +109,194 @@ export default function DashboardCards() {
       setCarregando(true);
       setErro("");
 
-      const { data, error } = await supabase.from("coletas").select(`
-        numero_nf,
-        data_nf,
-        data_envio_transportadora,
-        data_efetiva_coleta,
-        data_chegada_ads,
-        conhecimento,
-        status_pagamento_transportadora,
-        vencimento_transportadora,
-        numero_nf_cobranca_ads,
-        data_emissao_nf_cobranca_ads,
-        status_recebimento_ads,
-        vencimento_nf_cobranca_ads
-      `);
+      const { data, error } = await supabase
+        .from("coletas")
+        .select(`
+          numero_nf,
+          data_nf,
+          data_envio_transportadora,
+          data_efetiva_coleta,
+          data_chegada_ads,
+          conhecimento,
+          status_pagamento_transportadora,
+          vencimento_transportadora,
+          numero_nf_cobranca_ads,
+          data_emissao_nf_cobranca_ads,
+          status_recebimento_ads,
+          vencimento_nf_cobranca_ads
+        `);
 
       if (error) {
-        console.error("Erro ao carregar indicadores:", error);
-        setErro("Não foi possível carregar os indicadores.");
+        console.error(
+          "Erro ao carregar indicadores:",
+          error,
+        );
+
+        setErro(
+          "Não foi possível carregar os indicadores.",
+        );
+
         setCarregando(false);
+
         return;
       }
 
       const registros = (data ?? []) as Coleta[];
 
-      const novosIndicadores = registros.reduce<Indicadores>(
-        (acumulador, coleta) => {
-          acumulador.operacao.total += 1;
+      const novosIndicadores =
+        registros.reduce<Indicadores>(
+          (acumulador, coleta) => {
+            acumulador.operacao.total += 1;
 
-          const semNf = !coleta.numero_nf || !coleta.data_nf;
+            const semNf =
+              !coleta.numero_nf ||
+              !coleta.data_nf;
 
-          const solicitadaTransportadora =
-            Boolean(coleta.data_envio_transportadora);
+            const solicitadaTransportadora =
+              Boolean(
+                coleta.data_envio_transportadora,
+              );
 
-          const coletaRealizada = Boolean(coleta.data_efetiva_coleta);
+            const coletaRealizada =
+              Boolean(
+                coleta.data_efetiva_coleta,
+              );
 
-          const recebidaAds = Boolean(coleta.data_chegada_ads);
+            const recebidaAds =
+              Boolean(
+                coleta.data_chegada_ads,
+              );
 
-          if (semNf) {
-            acumulador.operacao.aguardandoNf += 1;
-          }
+            // -------------------------
+            // OPERAÇÃO
+            // -------------------------
 
-          if (
-            !semNf &&
-            solicitadaTransportadora &&
-            !coletaRealizada
-          ) {
-            acumulador.operacao.aguardandoColeta += 1;
-          }
+            if (semNf) {
+              acumulador.operacao.aguardandoNf += 1;
+            }
 
-          if (coletaRealizada && !recebidaAds) {
-            acumulador.operacao.coletaRealizada += 1;
-          }
+            if (
+              !semNf &&
+              solicitadaTransportadora &&
+              !coletaRealizada
+            ) {
+              acumulador.operacao.aguardandoColeta += 1;
+            }
 
-          if (recebidaAds) {
-            acumulador.operacao.recebidosAds += 1;
-          }
+            if (
+              coletaRealizada &&
+              !recebidaAds
+            ) {
+              acumulador.operacao.coletaRealizada += 1;
+            }
 
-          const statusTransportadora = normalizarTexto(
-            coleta.status_pagamento_transportadora,
-          );
+            if (recebidaAds) {
+              acumulador.operacao.recebidosAds += 1;
+            }
 
-          const pagamentoTransportadoraConcluido =
-            statusTransportadora === "pago";
+            // -------------------------
+            // FINANCEIRO TRANSPORTADORA
+            // -------------------------
 
-          const pagamentoTransportadoraVencido =
-            !pagamentoTransportadoraConcluido &&
-            dataVencida(coleta.vencimento_transportadora);
+            const statusTransportadora =
+              normalizarTexto(
+                coleta.status_pagamento_transportadora,
+              );
 
-          const possuiCobrancaTransportadora =
-            Boolean(coleta.conhecimento) ||
-            Boolean(coleta.vencimento_transportadora) ||
-            statusTransportadora === "aguardando pagamento" ||
-            statusTransportadora === "vencido";
+            const pagamentoTransportadoraConcluido =
+              statusTransportadora === "pago";
 
-          if (pagamentoTransportadoraConcluido) {
-            acumulador.transportadoras.pagos += 1;
-          } else if (pagamentoTransportadoraVencido) {
-            acumulador.transportadoras.vencidos += 1;
-          } else if (possuiCobrancaTransportadora) {
-            acumulador.transportadoras.aguardandoPagamento += 1;
-          }
+            const pagamentoTransportadoraVencido =
+              !pagamentoTransportadoraConcluido &&
+              dataVencida(
+                coleta.vencimento_transportadora,
+              );
 
-          const statusAds = normalizarTexto(
-            coleta.status_recebimento_ads,
-          );
+            const possuiCobrancaTransportadora =
+              Boolean(coleta.conhecimento) ||
+              Boolean(
+                coleta.vencimento_transportadora,
+              ) ||
+              statusTransportadora ===
+                "aguardando pagamento" ||
+              statusTransportadora === "vencido";
 
-          const nfAdsEmitida =
-            Boolean(coleta.numero_nf_cobranca_ads) ||
-            Boolean(coleta.data_emissao_nf_cobranca_ads) ||
-            statusAds === "emitida" ||
-            statusAds === "aguardando recebimento" ||
-            statusAds === "paga" ||
-            statusAds === "vencida";
+            if (
+              pagamentoTransportadoraConcluido
+            ) {
+              acumulador.transportadoras.pagos += 1;
+            } else if (
+              pagamentoTransportadoraVencido
+            ) {
+              acumulador.transportadoras.vencidos += 1;
+            } else if (
+              possuiCobrancaTransportadora
+            ) {
+              acumulador.transportadoras
+                .aguardandoPagamento += 1;
+            }
 
-          const nfAdsPaga = statusAds === "paga";
+            // -------------------------
+            // FINANCEIRO ADS
+            // -------------------------
 
-          const nfAdsVencida =
-            !nfAdsPaga &&
-            dataVencida(coleta.vencimento_nf_cobranca_ads);
+            const statusAds =
+              normalizarTexto(
+                coleta.status_recebimento_ads,
+              );
 
-          if (nfAdsEmitida) {
-            acumulador.financeiroAds.emitidas += 1;
-          }
+            const nfAdsEmitida =
+              Boolean(
+                coleta.numero_nf_cobranca_ads,
+              ) ||
+              Boolean(
+                coleta.data_emissao_nf_cobranca_ads,
+              ) ||
+              statusAds === "emitida" ||
+              statusAds ===
+                "aguardando recebimento" ||
+              statusAds === "paga" ||
+              statusAds === "vencida";
 
-          if (nfAdsPaga) {
-            acumulador.financeiroAds.pagas += 1;
-          } else if (nfAdsVencida) {
-            acumulador.financeiroAds.vencidas += 1;
-          } else if (
-            nfAdsEmitida &&
-            statusAds !== "cancelada"
-          ) {
-            acumulador.financeiroAds.aguardandoRecebimento += 1;
-          }
+            const nfAdsPaga =
+              statusAds === "paga";
 
-          return acumulador;
-        },
-        {
-          operacao: { ...inicial.operacao },
-          transportadoras: { ...inicial.transportadoras },
-          financeiroAds: { ...inicial.financeiroAds },
-        },
-      );
+            const nfAdsVencida =
+              !nfAdsPaga &&
+              dataVencida(
+                coleta.vencimento_nf_cobranca_ads,
+              );
+
+            if (nfAdsEmitida) {
+              acumulador.financeiroAds.emitidas += 1;
+            }
+
+            if (nfAdsPaga) {
+              acumulador.financeiroAds.pagas += 1;
+            } else if (nfAdsVencida) {
+              acumulador.financeiroAds.vencidas += 1;
+            } else if (
+              nfAdsEmitida &&
+              statusAds !== "cancelada"
+            ) {
+              acumulador.financeiroAds
+                .aguardandoRecebimento += 1;
+            }
+
+            return acumulador;
+          },
+          {
+            operacao: {
+              ...inicial.operacao,
+            },
+            transportadoras: {
+              ...inicial.transportadoras,
+            },
+            financeiroAds: {
+              ...inicial.financeiroAds,
+            },
+          },
+        );
 
       setIndicadores(novosIndicadores);
       setCarregando(false);
@@ -247,6 +322,10 @@ export default function DashboardCards() {
     };
   }, []);
 
+  // =========================================================
+  // CARDS DA OPERAÇÃO
+  // =========================================================
+
   const operacao = [
     {
       titulo: "Total de coletas",
@@ -257,6 +336,7 @@ export default function DashboardCards() {
       texto: "text-slate-900",
       faixa: "bg-slate-500",
     },
+
     {
       titulo: "Aguardando NF",
       valor: indicadores.operacao.aguardandoNf,
@@ -266,17 +346,19 @@ export default function DashboardCards() {
       texto: "text-amber-900",
       faixa: "bg-amber-500",
     },
+
     {
       titulo: "Aguardando coleta",
       valor: indicadores.operacao.aguardandoColeta,
       detalhe: "Transportadora ainda não coletou",
-      borda: "border-violet-200",
-      fundo: "bg-violet-50",
-      texto: "text-violet-900",
-      faixa: "bg-violet-500",
+      borda: "border-orange-200",
+      fundo: "bg-orange-50",
+      texto: "text-orange-900",
+      faixa: "bg-orange-500",
     },
+
     {
-      titulo: "Coleta realizada",
+      titulo: "Em transporte",
       valor: indicadores.operacao.coletaRealizada,
       detalhe: "Resíduo em deslocamento",
       borda: "border-blue-200",
@@ -284,6 +366,7 @@ export default function DashboardCards() {
       texto: "text-blue-900",
       faixa: "bg-blue-500",
     },
+
     {
       titulo: "Resíduos recebidos na ADS",
       valor: indicadores.operacao.recebidosAds,
@@ -295,29 +378,40 @@ export default function DashboardCards() {
     },
   ];
 
+  // =========================================================
+  // CARDS FINANCEIRO — TRANSPORTADORAS
+  // =========================================================
+
   const transportadoras = [
     {
       titulo: "CT-es aguardando pagamento",
-      valor: indicadores.transportadoras.aguardandoPagamento,
+      valor:
+        indicadores.transportadoras
+          .aguardandoPagamento,
       detalhe: "Cobranças pendentes",
-      borda: "border-amber-200",
-      fundo: "bg-amber-50",
-      texto: "text-amber-900",
-      faixa: "bg-amber-500",
+
+      borda: "border-orange-200",
+      fundo: "bg-orange-50",
+      texto: "text-orange-900",
+      faixa: "bg-orange-500",
     },
+
     {
       titulo: "CT-es pagos",
       valor: indicadores.transportadoras.pagos,
       detalhe: "Pagamentos concluídos",
+
       borda: "border-emerald-200",
       fundo: "bg-emerald-50",
       texto: "text-emerald-900",
       faixa: "bg-emerald-500",
     },
+
     {
       titulo: "CT-es vencidos",
       valor: indicadores.transportadoras.vencidos,
       detalhe: "Necessitam de atenção",
+
       borda: "border-red-200",
       fundo: "bg-red-50",
       texto: "text-red-900",
@@ -325,38 +419,51 @@ export default function DashboardCards() {
     },
   ];
 
+  // =========================================================
+  // CARDS FINANCEIRO — ADS
+  // =========================================================
+
   const financeiroAds = [
     {
       titulo: "NFs de cobrança emitidas",
       valor: indicadores.financeiroAds.emitidas,
       detalhe: "Cobranças geradas pela ADS",
+
       borda: "border-blue-200",
       fundo: "bg-blue-50",
       texto: "text-blue-900",
       faixa: "bg-blue-500",
     },
+
     {
       titulo: "Aguardando recebimento",
-      valor: indicadores.financeiroAds.aguardandoRecebimento,
+      valor:
+        indicadores.financeiroAds
+          .aguardandoRecebimento,
       detalhe: "Pagamentos pendentes",
-      borda: "border-amber-200",
-      fundo: "bg-amber-50",
-      texto: "text-amber-900",
-      faixa: "bg-amber-500",
+
+      borda: "border-orange-200",
+      fundo: "bg-orange-50",
+      texto: "text-orange-900",
+      faixa: "bg-orange-500",
     },
+
     {
       titulo: "NFs pagas",
       valor: indicadores.financeiroAds.pagas,
       detalhe: "Recebimentos concluídos",
+
       borda: "border-emerald-200",
       fundo: "bg-emerald-50",
       texto: "text-emerald-900",
       faixa: "bg-emerald-500",
     },
+
     {
       titulo: "NFs vencidas",
       valor: indicadores.financeiroAds.vencidas,
       detalhe: "Cobranças em atraso",
+
       borda: "border-red-200",
       fundo: "bg-red-50",
       texto: "text-red-900",
@@ -392,10 +499,15 @@ export default function DashboardCards() {
                 {card.titulo}
               </p>
 
-              <p className={`mt-2 text-3xl font-bold ${card.texto}`}>
+              <p
+                className={`mt-2 text-3xl font-bold ${card.texto}`}
+              >
                 {carregando
                   ? "..."
-                  : String(card.valor).padStart(2, "0")}
+                  : String(card.valor).padStart(
+                      2,
+                      "0",
+                    )}
               </p>
 
               <p className="mt-1 text-xs text-slate-500">
@@ -416,6 +528,8 @@ export default function DashboardCards() {
         </p>
       )}
 
+      {/* OPERAÇÃO */}
+
       <div>
         <div className="mb-4">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
@@ -432,6 +546,8 @@ export default function DashboardCards() {
           "sm:grid-cols-2 xl:grid-cols-5",
         )}
       </div>
+
+      {/* FINANCEIRO TRANSPORTADORAS */}
 
       <div>
         <div className="mb-4">
@@ -450,9 +566,11 @@ export default function DashboardCards() {
         )}
       </div>
 
+      {/* FINANCEIRO ADS */}
+
       <div>
         <div className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
             Financeiro — ADS
           </p>
 

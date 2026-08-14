@@ -49,7 +49,6 @@ type Coleta = {
   transportadora: string | null;
   data_envio_transportadora: string | null;
   data_prevista_coleta: string | null;
-  protocolo_transportadora: string | null;
   contato_transportadora: string | null;
 
   status: string | null;
@@ -349,6 +348,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
   const [coleta, setColeta] = useState<Coleta | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [atualizarHistorico, setAtualizarHistorico] = useState(0);
   const [tipoMensagem, setTipoMensagem] = useState<
@@ -573,7 +573,6 @@ export default function FormEditarColeta({ id }: { id: number }) {
       transportadora: valorOuNulo("transportadora"),
       data_envio_transportadora: valorOuNulo("dataEnvioTransportadora"),
       data_prevista_coleta: valorOuNulo("dataPrevistaColeta"),
-      protocolo_transportadora: valorOuNulo("protocoloTransportadora"),
       contato_transportadora: valorOuNulo("contatoTransportadora"),
 
       status: statusAutomatico,
@@ -619,15 +618,28 @@ export default function FormEditarColeta({ id }: { id: number }) {
       ),
     };
 
-    const { error } = await supabase
+    const {
+      data: coletaAtualizada,
+      error,
+    } = await supabase
       .from("coletas")
       .update(atualizacao)
-      .eq("id", id);
+      .eq("id", id)
+      .select("*")
+      .single();
 
-    if (error) {
-      console.error("Erro ao salvar alterações:", error);
+    if (error || !coletaAtualizada) {
+      console.error(
+        "Erro ao salvar alterações no banco:",
+        error,
+      );
+
       setTipoMensagem("erro");
-      setMensagem(`Não foi possível salvar: ${error.message}`);
+      setMensagem(
+        error
+          ? `Não foi possível salvar no banco: ${error.message}`
+          : "Não foi possível confirmar a atualização no banco de dados.",
+      );
       setSalvando(false);
       return;
     }
@@ -664,15 +676,9 @@ export default function FormEditarColeta({ id }: { id: number }) {
       }
     }
 
-    setColeta((anterior) =>
-      anterior
-        ? ({
-            ...anterior,
-            ...atualizacao,
-            id,
-          } as Coleta)
-        : anterior,
-    );
+    // Usa exatamente o registro devolvido pelo Supabase.
+    // Assim a tela só mostra sucesso se o banco realmente foi atualizado.
+    setColeta(coletaAtualizada as Coleta);
 
     setTipoMensagem("sucesso");
     setMensagem(
@@ -685,6 +691,61 @@ export default function FormEditarColeta({ id }: { id: number }) {
       top: 0,
       behavior: "smooth",
     });
+  }
+
+  async function excluirColeta() {
+    const confirmou = window.confirm(
+      `Tem certeza que deseja excluir a coleta #${id}? Esta ação não poderá ser desfeita.`,
+    );
+
+    if (!confirmou) {
+      return;
+    }
+
+    setExcluindo(true);
+    setTipoMensagem("carregando");
+    setMensagem("Excluindo coleta...");
+
+    const { error } = await supabase
+      .from("coletas")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("Erro ao excluir coleta:", error);
+      setTipoMensagem("erro");
+      setMensagem(`Não foi possível excluir a coleta: ${error.message}`);
+      setExcluindo(false);
+      return;
+    }
+
+    router.push("/coletas");
+    router.refresh();
+  }
+
+  function irParaAtalho(
+    aba: Aba | null,
+    idSecao: string,
+  ) {
+    if (aba) {
+      setAbaAtiva(aba);
+    }
+
+    window.history.replaceState(
+      null,
+      "",
+      `#${idSecao}`,
+    );
+
+    window.setTimeout(() => {
+      const elemento =
+        document.getElementById(idSecao);
+
+      elemento?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
   }
 
   function classeBotaoAba(aba: Aba) {
@@ -745,7 +806,13 @@ export default function FormEditarColeta({ id }: { id: number }) {
         </div>
       )}
 
-      <PainelInteligenteColeta
+      <div id="resumo" className="scroll-mt-28">
+      <details className="group" open>
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Resumo inteligente da coleta
+        </summary>
+
+        <PainelInteligenteColeta
         numeroOv={coleta.numero_ov}
         cliente={coleta.cliente}
         loja={coleta.loja}
@@ -777,8 +844,16 @@ export default function FormEditarColeta({ id }: { id: number }) {
           coleta.data_recebimento_pagamento_ads
         }
       />
+      </details>
+      </div>
 
-      <TimelineColeta
+      <div id="timeline" className="scroll-mt-28">
+      <details className="group">
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Timeline da coleta
+        </summary>
+
+        <TimelineColeta
         dataSolicitacao={coleta.data_solicitacao}
         dataOv={coleta.data_ov}
         numeroOv={coleta.numero_ov}
@@ -802,11 +877,120 @@ export default function FormEditarColeta({ id }: { id: number }) {
           coleta.data_recebimento_pagamento_ads
         }
       />
+      </details>
+      </div>
 
-      <HistoricoColeta
+      <div id="historico" className="scroll-mt-28">
+      <details className="group">
+        <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
+          Histórico da coleta
+        </summary>
+
+        <HistoricoColeta
         coletaId={id}
         atualizarEm={atualizarHistorico}
       />
+      </details>
+      </div>
+
+      <div className="sticky top-3 z-50 mb-3 rounded-2xl border border-slate-200 bg-slate-950/95 p-3 text-white shadow-xl backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+            Atalhos rápidos
+          </span>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                "operacao",
+                "cliente-nf",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Cliente e NF
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                "operacao",
+                "transportadora",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Transportadora
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                "operacao",
+                "coleta-chegada",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Coleta e chegada
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                "transportadora",
+                "financeiro-transportadora",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Financeiro — Transportadora
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                "ads",
+                "financeiro-ads",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Financeiro — ADS
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                null,
+                "timeline",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Timeline
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              irParaAtalho(
+                null,
+                "historico",
+              )
+            }
+            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
+          >
+            Histórico
+          </button>
+        </div>
+      </div>
 
       <nav className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="grid gap-3 md:grid-cols-3">
@@ -837,7 +1021,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       </nav>
 
       <div className={abaAtiva === "operacao" ? "space-y-6" : "hidden"}>
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article id="cliente-nf" className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 1
@@ -973,22 +1157,20 @@ export default function FormEditarColeta({ id }: { id: number }) {
 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <label className={rotulo}>
-              Data da OV *
+              Data da OV
               <input
                 type="date"
                 name="dataOv"
-                required
                 defaultValue={coleta.data_ov ?? ""}
                 className={campo}
               />
             </label>
 
             <label className={rotulo}>
-              Número da OV *
+              Número da OV
               <input
                 type="text"
                 name="numeroOv"
-                required
                 defaultValue={coleta.numero_ov ?? ""}
                 className={campo}
               />
@@ -1016,7 +1198,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article id="transportadora" className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 3
@@ -1088,16 +1270,6 @@ export default function FormEditarColeta({ id }: { id: number }) {
             </label>
 
             <label className={rotulo}>
-              Protocolo da solicitação
-              <input
-                type="text"
-                name="protocoloTransportadora"
-                defaultValue={coleta.protocolo_transportadora ?? ""}
-                className={campo}
-              />
-            </label>
-
-            <label className={rotulo}>
               Contato da transportadora
               <input
                 type="text"
@@ -1119,7 +1291,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article id="coleta-chegada" className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapas 4 e 5
@@ -1219,7 +1391,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
           abaAtiva === "transportadora" ? "space-y-6" : "hidden"
         }
       >
-        <article className="rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
+        <article id="financeiro-transportadora" className="scroll-mt-32 rounded-2xl border border-blue-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
               Financeiro — Transportadora
@@ -1314,7 +1486,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       </div>
 
       <div className={abaAtiva === "ads" ? "space-y-6" : "hidden"}>
-        <article className="rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+        <article id="financeiro-ads" className="scroll-mt-32 rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-700">
               Financeiro — ADS
@@ -1417,21 +1589,32 @@ export default function FormEditarColeta({ id }: { id: number }) {
         </article>
       </div>
 
-      <div className="flex flex-col-reverse justify-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
-        <Link
-          href="/coletas"
-          className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          Voltar
-        </Link>
-
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <button
-          type="submit"
-          disabled={salvando}
-          className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          type="button"
+          onClick={excluirColeta}
+          disabled={salvando || excluindo}
+          className="rounded-xl border border-red-300 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {salvando ? "Salvando..." : "Salvar alterações"}
+          {excluindo ? "Excluindo..." : "Excluir coleta"}
         </button>
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row">
+          <Link
+            href="/coletas"
+            className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Voltar
+          </Link>
+
+          <button
+            type="submit"
+            disabled={salvando || excluindo}
+            className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {salvando ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
       </div>
     </form>
   );

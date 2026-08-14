@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
@@ -53,6 +54,7 @@ export default function ColetasTable() {
   const [pesquisa, setPesquisa] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [excluindoId, setExcluindoId] = useState<number | null>(null);
 
   useEffect(() => {
     async function carregarColetas() {
@@ -80,6 +82,46 @@ export default function ColetasTable() {
 
     carregarColetas();
   }, []);
+
+  async function excluirColeta(coleta: Coleta) {
+    const identificacao =
+      coleta.numero_ov ||
+      coleta.loja ||
+      `#${coleta.id}`;
+
+    const confirmou = window.confirm(
+      `Tem certeza que deseja excluir a coleta ${identificacao}?\n\nEsta ação não poderá ser desfeita.`,
+    );
+
+    if (!confirmou) {
+      return;
+    }
+
+    setErro("");
+    setExcluindoId(coleta.id);
+
+    const { error } = await supabase
+      .from("coletas")
+      .delete()
+      .eq("id", coleta.id);
+
+    if (error) {
+      console.error("Erro ao excluir coleta:", error);
+      setErro(
+        `Não foi possível excluir a coleta: ${error.message}`,
+      );
+      setExcluindoId(null);
+      return;
+    }
+
+    setColetas((listaAtual) =>
+      listaAtual.filter(
+        (item) => item.id !== coleta.id,
+      ),
+    );
+
+    setExcluindoId(null);
+  }
 
   const coletasFiltradas = useMemo(() => {
     const termo = pesquisa.trim().toLowerCase();
@@ -111,7 +153,10 @@ export default function ColetasTable() {
     <article className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center">
         <div>
-          <h3 className="text-lg font-bold">Coletas recentes</h3>
+          <h3 className="text-lg font-bold">
+            Coletas recentes
+          </h3>
+
           <p className="text-sm text-slate-500">
             Dados reais cadastrados no Supabase
           </p>
@@ -120,7 +165,9 @@ export default function ColetasTable() {
         <input
           type="search"
           value={pesquisa}
-          onChange={(evento) => setPesquisa(evento.target.value)}
+          onChange={(evento) =>
+            setPesquisa(evento.target.value)
+          }
           placeholder="Pesquisar OV, NF ou cliente..."
           className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-emerald-600 md:w-72"
         />
@@ -133,64 +180,106 @@ export default function ColetasTable() {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left">
+        <table className="w-full min-w-[1050px] text-left">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-5 py-4">OV</th>
-              <th className="px-5 py-4">Cliente / Unidade</th>
-              <th className="px-5 py-4">Nota fiscal</th>
-              <th className="px-5 py-4">Transportadora</th>
-              <th className="px-5 py-4">Data da coleta</th>
-              <th className="px-5 py-4">Status</th>
+              <th className="px-5 py-4">
+                OV
+              </th>
+
+              <th className="px-5 py-4">
+                Cliente / Unidade
+              </th>
+
+              <th className="px-5 py-4">
+                Nota fiscal
+              </th>
+
+              <th className="px-5 py-4">
+                Transportadora
+              </th>
+
+              <th className="px-5 py-4">
+                Data da coleta
+              </th>
+
+              <th className="px-5 py-4">
+                Status
+              </th>
+
+              <th className="px-5 py-4">
+                Ações
+              </th>
             </tr>
           </thead>
 
           <tbody className="divide-y divide-slate-100 text-sm">
             {carregando && (
               <tr>
-                <td className="px-5 py-8 text-center text-slate-500" colSpan={6}>
+                <td
+                  className="px-5 py-8 text-center text-slate-500"
+                  colSpan={7}
+                >
                   Carregando coletas...
                 </td>
               </tr>
             )}
 
-            {!carregando && coletasFiltradas.length === 0 && (
-              <tr>
-                <td className="px-5 py-8 text-center text-slate-500" colSpan={6}>
-                  Nenhuma coleta encontrada.
-                </td>
-              </tr>
-            )}
+            {!carregando &&
+              coletasFiltradas.length === 0 && (
+                <tr>
+                  <td
+                    className="px-5 py-8 text-center text-slate-500"
+                    colSpan={7}
+                  >
+                    Nenhuma coleta encontrada.
+                  </td>
+                </tr>
+              )}
 
             {!carregando &&
               coletasFiltradas.map((coleta) => (
-                <tr key={coleta.id} className="transition hover:bg-slate-50">
+                <tr
+                  key={coleta.id}
+                  className="transition hover:bg-slate-50"
+                >
                   <td className="px-5 py-4 font-semibold text-emerald-700">
-                    {coleta.numero_ov || `#${coleta.id}`}
+                    {coleta.numero_ov ||
+                      `#${coleta.id}`}
                   </td>
 
                   <td className="px-5 py-4">
                     <p className="font-medium">
-                      {coleta.cliente || "Cliente não informado"}
+                      {coleta.cliente ||
+                        "Cliente não informado"}
                     </p>
+
                     <p className="text-xs text-slate-500">
-                      {[coleta.loja, coleta.cidade, coleta.estado]
+                      {[
+                        coleta.loja,
+                        coleta.cidade,
+                        coleta.estado,
+                      ]
                         .filter(Boolean)
-                        .join(" • ") || "Unidade não informada"}
+                        .join(" • ") ||
+                        "Unidade não informada"}
                     </p>
                   </td>
 
                   <td className="px-5 py-4">
-                    {coleta.numero_nf || "Aguardando"}
+                    {coleta.numero_nf ||
+                      "Aguardando"}
                   </td>
 
                   <td className="px-5 py-4">
-                    {coleta.transportadora || "Não definida"}
+                    {coleta.transportadora ||
+                      "Não definida"}
                   </td>
 
                   <td className="px-5 py-4">
                     {formatarData(
-                      coleta.data_coleta || coleta.data_prevista_coleta,
+                      coleta.data_coleta ||
+                        coleta.data_prevista_coleta,
                     )}
                   </td>
 
@@ -200,8 +289,35 @@ export default function ColetasTable() {
                         coleta.status,
                       )}`}
                     >
-                      {coleta.status || "Sem status"}
+                      {coleta.status ||
+                        "Sem status"}
                     </span>
+                  </td>
+
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/coletas/${coleta.id}/editar`}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                      >
+                        Editar
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          excluirColeta(coleta)
+                        }
+                        disabled={
+                          excluindoId === coleta.id
+                        }
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {excluindoId === coleta.id
+                          ? "Excluindo..."
+                          : "Excluir"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
