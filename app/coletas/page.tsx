@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
@@ -496,7 +496,7 @@ function pertenceAoIndicador(
   }
 }
 
-export default function TodasAsColetasPage() {
+function TodasAsColetasContent() {
   const searchParams = useSearchParams();
   const indicador = searchParams.get("indicador") ?? "";
 
@@ -1057,5 +1057,51 @@ export default function TodasAsColetasPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function CarregandoTodasAsColetas() {
+  return (
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <Header />
+
+      <div className="mx-auto grid max-w-[1600px] grid-cols-1 lg:grid-cols-[230px_1fr]">
+        <Sidebar />
+
+        <section className="min-w-0 px-5 py-7 md:px-8 lg:px-8">
+          <div className="mb-7">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                Controle operacional
+              </p>
+            </div>
+
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+              Todas as coletas
+            </h2>
+
+            <p className="mt-1.5 text-sm text-slate-500">
+              Carregando operações cadastradas...
+            </p>
+          </div>
+
+          <article className="rounded-[24px] border border-slate-200 bg-white px-5 py-16 text-center shadow-sm">
+            <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              Carregando coletas...
+            </p>
+          </article>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export default function TodasAsColetasPage() {
+  return (
+    <Suspense fallback={<CarregandoTodasAsColetas />}>
+      <TodasAsColetasContent />
+    </Suspense>
   );
 }

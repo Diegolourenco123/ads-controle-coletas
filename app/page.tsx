@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+
 import AlertasOperacionais from "./components/AlertasOperacionais";
 import ColetasTable from "./components/ColetasTable";
 import DashboardCards from "./components/DashboardCards";
@@ -6,6 +8,18 @@ import DashboardExecutivo from "./components/DashboardExecutivo";
 import GraficosDesempenho from "./components/GraficosDesempenho";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
+
+function CarregandoPainel() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-16 text-center shadow-sm">
+      <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+
+      <p className="mt-4 text-sm font-medium text-slate-500">
+        Carregando painel operacional...
+      </p>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
@@ -39,11 +53,13 @@ export default function Home() {
             </Link>
           </div>
 
-          <DashboardExecutivo />
-          <DashboardCards />
-          <GraficosDesempenho />
-          <AlertasOperacionais />
-          <ColetasTable />
+          <Suspense fallback={<CarregandoPainel />}>
+            <DashboardExecutivo />
+            <DashboardCards />
+            <GraficosDesempenho />
+            <AlertasOperacionais />
+            <ColetasTable />
+          </Suspense>
         </section>
       </div>
     </main>
