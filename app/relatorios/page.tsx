@@ -60,6 +60,9 @@ export default function RelatoriosPage() {
   const [dataInicial, setDataInicial] = useState("");
   const [dataFinal, setDataFinal] = useState("");
 
+  const [pagina, setPagina] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(50);
+
   useEffect(() => {
     async function carregarColetas() {
       setCarregando(true);
@@ -84,6 +87,23 @@ export default function RelatoriosPage() {
     }
 
     carregarColetas();
+
+    const canal = supabase
+      .channel("relatorios-tempo-real")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "coletas",
+        },
+        carregarColetas,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
   }, []);
 
   const clientes = useMemo(
@@ -142,7 +162,8 @@ export default function RelatoriosPage() {
         (!estado || coleta.estado === estado) &&
         (!dataInicial ||
           Boolean(dataReferencia && dataReferencia >= dataInicial)) &&
-        (!dataFinal || Boolean(dataReferencia && dataReferencia <= dataFinal))
+        (!dataFinal ||
+          Boolean(dataReferencia && dataReferencia <= dataFinal))
       );
     });
   }, [
@@ -154,6 +175,19 @@ export default function RelatoriosPage() {
     estado,
     dataInicial,
     dataFinal,
+  ]);
+
+  useEffect(() => {
+    setPagina(1);
+  }, [
+    pesquisa,
+    status,
+    cliente,
+    transportadora,
+    estado,
+    dataInicial,
+    dataFinal,
+    itensPorPagina,
   ]);
 
   const indicadores = useMemo(() => {
@@ -179,6 +213,73 @@ export default function RelatoriosPage() {
     };
   }, [coletasFiltradas]);
 
+  const distribuicaoStatus = useMemo(() => {
+    const mapa = new Map<string, number>();
+
+    coletasFiltradas.forEach((coleta) => {
+      const chave = coleta.status || "Sem status";
+      mapa.set(chave, (mapa.get(chave) ?? 0) + 1);
+    });
+
+    return [...mapa.entries()]
+      .map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 6);
+  }, [coletasFiltradas]);
+
+  const coletasPorMes = useMemo(() => {
+    const mapa = new Map<string, number>();
+
+    coletasFiltradas.forEach((coleta) => {
+      if (!coleta.data_solicitacao) return;
+
+      const chave = coleta.data_solicitacao.slice(0, 7);
+      mapa.set(chave, (mapa.get(chave) ?? 0) + 1);
+    });
+
+    return [...mapa.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([mes, valor]) => {
+        const [ano, numeroMes] = mes.split("-");
+        const rotulo = new Intl.DateTimeFormat("pt-BR", {
+          month: "short",
+        })
+          .format(new Date(Number(ano), Number(numeroMes) - 1, 1))
+          .replace(".", "");
+
+        return {
+          mes,
+          rotulo: `${rotulo}/${ano.slice(2)}`,
+          valor,
+        };
+      });
+  }, [coletasFiltradas]);
+
+  const maiorStatus = Math.max(
+    1,
+    ...distribuicaoStatus.map((item) => item.valor),
+  );
+
+  const maiorMes = Math.max(
+    1,
+    ...coletasPorMes.map((item) => item.valor),
+  );
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(coletasFiltradas.length / itensPorPagina),
+  );
+
+  const coletasPaginadas = useMemo(() => {
+    const inicio = (pagina - 1) * itensPorPagina;
+
+    return coletasFiltradas.slice(
+      inicio,
+      inicio + itensPorPagina,
+    );
+  }, [coletasFiltradas, pagina, itensPorPagina]);
+
   function limparFiltros() {
     setPesquisa("");
     setStatus("");
@@ -187,6 +288,7 @@ export default function RelatoriosPage() {
     setEstado("");
     setDataInicial("");
     setDataFinal("");
+    setPagina(1);
   }
 
   function exportarCsv() {
@@ -253,6 +355,16 @@ export default function RelatoriosPage() {
     URL.revokeObjectURL(url);
   }
 
+  const inicioExibicao =
+    coletasFiltradas.length === 0
+      ? 0
+      : (pagina - 1) * itensPorPagina + 1;
+
+  const fimExibicao = Math.min(
+    pagina * itensPorPagina,
+    coletasFiltradas.length,
+  );
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <Header />
@@ -261,22 +373,31 @@ export default function RelatoriosPage() {
         <Sidebar />
 
         <section className="min-w-0 p-5 md:p-8">
-          <div className="mb-7 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+          {/* CABEÇALHO */}
+          <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
             <div>
-              <p className="text-sm font-medium text-emerald-700">
-                Gestão e indicadores
-              </p>
-              <h2 className="mt-1 text-3xl font-bold">Relatórios</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Filtre, consulte, imprima e exporte os dados operacionais.
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                  Gestão e indicadores
+                </p>
+              </div>
+
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Relatórios
+              </h2>
+
+              <p className="mt-1.5 text-sm text-slate-500">
+                Filtre, analise, imprima e exporte os dados operacionais.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3 sm:flex-row print:hidden">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 Imprimir relatório
               </button>
@@ -285,7 +406,7 @@ export default function RelatoriosPage() {
                 type="button"
                 onClick={exportarCsv}
                 disabled={coletasFiltradas.length === 0}
-                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Exportar para Excel
               </button>
@@ -298,15 +419,27 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          <section className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {/* INDICADORES */}
+          <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              ["Total filtrado", indicadores.total, "Coletas"],
-              ["Aguardando NF", indicadores.aguardandoNf, "Pendências"],
-              ["Em transporte", indicadores.emTransporte, "Em andamento"],
+              ["Total filtrado", indicadores.total, "Coletas", "bg-blue-500"],
+              [
+                "Aguardando NF",
+                indicadores.aguardandoNf,
+                "Pendências",
+                "bg-amber-500",
+              ],
+              [
+                "Em transporte",
+                indicadores.emTransporte,
+                "Em andamento",
+                "bg-violet-500",
+              ],
               [
                 "Recebidas/finalizadas",
                 indicadores.finalizadas,
                 "Concluídas",
+                "bg-emerald-500",
               ],
               [
                 "Peso total",
@@ -314,26 +447,39 @@ export default function RelatoriosPage() {
                   maximumFractionDigits: 2,
                 }),
                 "Quilogramas",
+                "bg-slate-500",
               ],
-            ].map(([titulo, valor, detalhe]) => (
+            ].map(([titulo, valor, detalhe, cor]) => (
               <article
                 key={String(titulo)}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
               >
-                <p className="text-sm font-medium text-slate-500">
-                  {titulo}
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${cor}`} />
+                  <p className="text-xs font-semibold text-slate-500">
+                    {titulo}
+                  </p>
+                </div>
+
+                <p className="mt-2 text-2xl font-black text-slate-900">
+                  {valor}
                 </p>
-                <p className="mt-2 text-3xl font-bold">{valor}</p>
-                <p className="mt-1 text-xs text-slate-400">{detalhe}</p>
+
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {detalhe}
+                </p>
               </article>
             ))}
           </section>
 
-          <article className="mb-7 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:hidden">
-            <div className="mb-5 flex items-center justify-between gap-4">
+          {/* FILTROS */}
+          <article className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:hidden">
+            <div className="mb-4 flex items-center justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold">Filtros do relatório</h3>
-                <p className="text-sm text-slate-500">
+                <h3 className="text-sm font-bold text-slate-900">
+                  Filtros do relatório
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
                   Combine os filtros para gerar uma consulta específica.
                 </p>
               </div>
@@ -341,25 +487,25 @@ export default function RelatoriosPage() {
               <button
                 type="button"
                 onClick={limparFiltros}
-                className="text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
               >
                 Limpar filtros
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <input
                 type="search"
                 value={pesquisa}
                 onChange={(evento) => setPesquisa(evento.target.value)}
                 placeholder="Pesquisar OV, NF, cidade..."
-                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
               />
 
               <select
                 value={cliente}
                 onChange={(evento) => setCliente(evento.target.value)}
-                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
               >
                 <option value="">Todos os clientes</option>
                 {clientes.map((item) => (
@@ -372,7 +518,7 @@ export default function RelatoriosPage() {
               <select
                 value={transportadora}
                 onChange={(evento) => setTransportadora(evento.target.value)}
-                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
               >
                 <option value="">Todas as transportadoras</option>
                 {transportadoras.map((item) => (
@@ -385,15 +531,12 @@ export default function RelatoriosPage() {
               <select
                 value={status}
                 onChange={(evento) => setStatus(evento.target.value)}
-                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
               >
                 <option value="">Todos os status</option>
                 <option value="Aguardando NF">Aguardando NF</option>
-                <option value="Aguardando transportadora">
-                  Aguardando transportadora
-                </option>
-                <option value="Coleta solicitada">Coleta solicitada</option>
-                <option value="Coleta agendada">Coleta agendada</option>
+                <option value="Aguardando coleta">Aguardando coleta</option>
+                <option value="Coleta realizada">Coleta realizada</option>
                 <option value="Em transporte">Em transporte</option>
                 <option value="Recebido na ADS">Recebido na ADS</option>
                 <option value="Finalizado">Finalizado</option>
@@ -402,7 +545,7 @@ export default function RelatoriosPage() {
               <select
                 value={estado}
                 onChange={(evento) => setEstado(evento.target.value)}
-                className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
               >
                 <option value="">Todos os estados</option>
                 {estados.map((item) => (
@@ -412,50 +555,167 @@ export default function RelatoriosPage() {
                 ))}
               </select>
 
-              <label className="text-sm font-semibold text-slate-700">
+              <label className="text-xs font-semibold text-slate-600">
                 Data inicial
                 <input
                   type="date"
                   value={dataInicial}
                   onChange={(evento) => setDataInicial(evento.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
                 />
               </label>
 
-              <label className="text-sm font-semibold text-slate-700">
+              <label className="text-xs font-semibold text-slate-600">
                 Data final
                 <input
                   type="date"
                   value={dataFinal}
                   onChange={(evento) => setDataFinal(evento.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
                 />
               </label>
             </div>
           </article>
 
+          {/* GRÁFICOS */}
+          <section className="mb-5 grid gap-4 xl:grid-cols-2 print:hidden">
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Distribuição por status
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Visão resumida dos principais status do filtro atual.
+                </p>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {distribuicaoStatus.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    Sem dados para exibir.
+                  </p>
+                ) : (
+                  distribuicaoStatus.map((item) => (
+                    <div key={item.nome}>
+                      <div className="mb-1.5 flex items-center justify-between gap-3">
+                        <span className="truncate text-xs font-semibold text-slate-600">
+                          {item.nome}
+                        </span>
+                        <span className="text-xs font-black text-slate-800">
+                          {item.valor}
+                        </span>
+                      </div>
+
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-emerald-500"
+                          style={{
+                            width: `${Math.max(
+                              6,
+                              (item.valor / maiorStatus) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Coletas por mês
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Últimos 6 meses presentes no resultado filtrado.
+                </p>
+              </div>
+
+              <div className="mt-6 flex h-44 items-end gap-3">
+                {coletasPorMes.length === 0 ? (
+                  <p className="self-start text-sm text-slate-400">
+                    Sem dados para exibir.
+                  </p>
+                ) : (
+                  coletasPorMes.map((item) => (
+                    <div
+                      key={item.mes}
+                      className="flex min-w-0 flex-1 flex-col items-center justify-end"
+                    >
+                      <span className="mb-2 text-[11px] font-black text-slate-700">
+                        {item.valor}
+                      </span>
+
+                      <div className="flex h-32 w-full items-end rounded-xl bg-slate-50 px-2">
+                        <div
+                          className="w-full rounded-t-lg bg-emerald-500"
+                          style={{
+                            height: `${Math.max(
+                              12,
+                              (item.valor / maiorMes) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+
+                      <span className="mt-2 text-[10px] font-semibold text-slate-500">
+                        {item.rotulo}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+          </section>
+
+          {/* RESULTADOS */}
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 p-5">
-              <h3 className="text-lg font-bold">Resultado do relatório</h3>
-              <p className="text-sm text-slate-500">
-                {coletasFiltradas.length} registro(s) encontrado(s)
-              </p>
+            <div className="flex flex-col justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Resultado do relatório
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  {coletasFiltradas.length} registro(s) encontrado(s)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 print:hidden">
+                <span className="text-xs font-semibold text-slate-500">
+                  Exibir
+                </span>
+
+                <select
+                  value={itensPorPagina}
+                  onChange={(evento) =>
+                    setItensPorPagina(Number(evento.target.value))
+                  }
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1350px] text-left">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <table className="w-full min-w-[1320px] text-left">
+                <thead className="border-b border-slate-200 bg-slate-50/70 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
-                    <th className="px-4 py-4">Solicitação</th>
-                    <th className="px-4 py-4">OV</th>
-                    <th className="px-4 py-4">Cliente / Unidade</th>
-                    <th className="px-4 py-4">Cidade / UF</th>
-                    <th className="px-4 py-4">NF</th>
-                    <th className="px-4 py-4">Transportadora</th>
-                    <th className="px-4 py-4">Coleta</th>
-                    <th className="px-4 py-4">Chegada ADS</th>
-                    <th className="px-4 py-4">Peso</th>
-                    <th className="px-4 py-4">Status</th>
+                    <th className="px-4 py-3.5">Solicitação</th>
+                    <th className="px-4 py-3.5">OV</th>
+                    <th className="px-4 py-3.5">Cliente / Unidade</th>
+                    <th className="px-4 py-3.5">Cidade / UF</th>
+                    <th className="px-4 py-3.5">NF</th>
+                    <th className="px-4 py-3.5">Transportadora</th>
+                    <th className="px-4 py-3.5">Coleta</th>
+                    <th className="px-4 py-3.5">Chegada ADS</th>
+                    <th className="px-4 py-3.5">Peso</th>
+                    <th className="px-4 py-3.5">Status</th>
                   </tr>
                 </thead>
 
@@ -464,7 +724,7 @@ export default function RelatoriosPage() {
                     <tr>
                       <td
                         colSpan={10}
-                        className="px-5 py-8 text-center text-slate-500"
+                        className="px-5 py-12 text-center text-slate-500"
                       >
                         Carregando relatório...
                       </td>
@@ -475,7 +735,7 @@ export default function RelatoriosPage() {
                     <tr>
                       <td
                         colSpan={10}
-                        className="px-5 py-8 text-center text-slate-500"
+                        className="px-5 py-12 text-center text-slate-500"
                       >
                         Nenhum registro encontrado para os filtros selecionados.
                       </td>
@@ -483,62 +743,63 @@ export default function RelatoriosPage() {
                   )}
 
                   {!carregando &&
-                    coletasFiltradas.map((coleta) => (
+                    coletasPaginadas.map((coleta) => (
                       <tr
                         key={coleta.id}
-                        className="transition hover:bg-slate-50"
+                        className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {formatarData(coleta.data_solicitacao)}
                         </td>
 
-                        <td className="px-4 py-4 font-semibold text-emerald-700">
+                        <td className="whitespace-nowrap px-4 py-3.5 font-black text-emerald-700">
                           {coleta.numero_ov || `#${coleta.id}`}
                         </td>
 
-                        <td className="px-4 py-4">
-                          <p className="font-medium">
+                        <td className="px-4 py-3.5">
+                          <p className="font-bold text-slate-800">
                             {coleta.cliente || "Cliente não informado"}
                           </p>
-                          <p className="text-xs text-slate-500">
+
+                          <p className="mt-1 max-w-[260px] text-xs text-slate-500">
                             {coleta.loja || "Unidade não informada"}
                           </p>
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {[coleta.cidade, coleta.estado]
                             .filter(Boolean)
                             .join("/") || "—"}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {coleta.numero_nf || "Aguardando"}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="max-w-[220px] px-4 py-3.5 text-slate-600">
                           {coleta.transportadora || "Não definida"}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {formatarData(
                             coleta.data_coleta ||
                               coleta.data_prevista_coleta,
                           )}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {formatarData(coleta.data_chegada_ads)}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
                           {coleta.peso !== null
                             ? `${coleta.peso.toLocaleString("pt-BR")} kg`
                             : "—"}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-3.5">
                           <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${classeStatus(
+                            className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${classeStatus(
                               coleta.status,
                             )}`}
                           >
@@ -550,6 +811,56 @@ export default function RelatoriosPage() {
                 </tbody>
               </table>
             </div>
+
+            {!carregando && coletasFiltradas.length > 0 && (
+              <div className="flex flex-col justify-between gap-3 border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center print:hidden">
+                <p className="text-xs text-slate-500">
+                  Mostrando{" "}
+                  <span className="font-bold text-slate-700">
+                    {inicioExibicao}
+                  </span>{" "}
+                  a{" "}
+                  <span className="font-bold text-slate-700">
+                    {fimExibicao}
+                  </span>{" "}
+                  de{" "}
+                  <span className="font-bold text-slate-700">
+                    {coletasFiltradas.length}
+                  </span>{" "}
+                  registro(s)
+                </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPagina((atual) => Math.max(1, atual - 1))
+                    }
+                    disabled={pagina === 1}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Anterior
+                  </button>
+
+                  <span className="px-2 text-xs font-bold text-slate-600">
+                    Página {pagina} de {totalPaginas}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPagina((atual) =>
+                        Math.min(totalPaginas, atual + 1),
+                      )
+                    }
+                    disabled={pagina === totalPaginas}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
           </article>
         </section>
       </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import { supabase } from "../lib/supabase";
@@ -15,9 +16,13 @@ type Coleta = {
   cidade: string | null;
   estado: string | null;
   numero_nf: string | null;
+  data_nf: string | null;
   transportadora: string | null;
+  data_envio_transportadora: string | null;
   data_prevista_coleta: string | null;
   data_coleta: string | null;
+  data_efetiva_coleta: string | null;
+  data_chegada_ads: string | null;
   status: string | null;
   created_at: string | null;
 
@@ -371,7 +376,130 @@ function IconeMais() {
   );
 }
 
+
+function normalizarTexto(texto: string | null | undefined) {
+  return (texto ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+const nomesIndicadores: Record<string, string> = {
+  total: "Todas as coletas",
+  "aguardando-nf": "Aguardando NF",
+  "aguardando-coleta": "Aguardando coleta",
+  "coleta-realizada": "Coleta realizada",
+  "recebidos-ads": "Resíduos recebidos na ADS",
+  "cte-aguardando-pagamento": "CT-es aguardando pagamento",
+  "cte-pagos": "CT-es pagos",
+  "cte-vencidos": "CT-es vencidos",
+  "nf-ads-emitidas": "NFs de cobrança emitidas",
+  "nf-ads-aguardando": "Aguardando recebimento",
+  "nf-ads-pagas": "NFs pagas",
+  "nf-ads-vencidas": "NFs vencidas",
+};
+
+function pertenceAoIndicador(
+  coleta: Coleta,
+  indicador: string,
+) {
+  if (!indicador || indicador === "total") {
+    return true;
+  }
+
+  const statusOperacional = normalizarTexto(coleta.status);
+
+  const statusTransportadora = normalizarTexto(
+    coleta.status_pagamento_transportadora,
+  );
+
+  const pagamentoTransportadoraConcluido =
+    statusTransportadora === "pago";
+
+  const pagamentoTransportadoraVencido =
+    !pagamentoTransportadoraConcluido &&
+    dataVencida(coleta.vencimento_transportadora);
+
+  const possuiCobrancaTransportadora =
+    Boolean(coleta.conhecimento) ||
+    Boolean(coleta.vencimento_transportadora) ||
+    statusTransportadora === "aguardando pagamento" ||
+    statusTransportadora === "vencido";
+
+  const statusAds = normalizarTexto(
+    coleta.status_recebimento_ads,
+  );
+
+  const nfAdsEmitida =
+    Boolean(coleta.numero_nf_cobranca_ads) ||
+    Boolean(coleta.data_emissao_nf_cobranca_ads) ||
+    statusAds === "emitida" ||
+    statusAds === "aguardando recebimento" ||
+    statusAds === "paga" ||
+    statusAds === "vencida";
+
+  const nfAdsPaga = statusAds === "paga";
+
+  const nfAdsVencida =
+    !nfAdsPaga &&
+    dataVencida(coleta.vencimento_nf_cobranca_ads);
+
+  switch (indicador) {
+    case "aguardando-nf":
+      return statusOperacional === "aguardando nf";
+
+    case "aguardando-coleta":
+      return statusOperacional === "aguardando coleta";
+
+    case "coleta-realizada":
+      return statusOperacional === "coleta realizada";
+
+    case "recebidos-ads":
+      return (
+        statusOperacional === "recebido na ads" ||
+        statusOperacional === "finalizado"
+      );
+
+    case "cte-pagos":
+      return pagamentoTransportadoraConcluido;
+
+    case "cte-vencidos":
+      return pagamentoTransportadoraVencido;
+
+    case "cte-aguardando-pagamento":
+      return (
+        !pagamentoTransportadoraConcluido &&
+        !pagamentoTransportadoraVencido &&
+        possuiCobrancaTransportadora
+      );
+
+    case "nf-ads-emitidas":
+      return nfAdsEmitida;
+
+    case "nf-ads-pagas":
+      return nfAdsPaga;
+
+    case "nf-ads-vencidas":
+      return nfAdsVencida;
+
+    case "nf-ads-aguardando":
+      return (
+        nfAdsEmitida &&
+        !nfAdsPaga &&
+        !nfAdsVencida &&
+        statusAds !== "cancelada"
+      );
+
+    default:
+      return true;
+  }
+}
+
 export default function TodasAsColetasPage() {
+  const searchParams = useSearchParams();
+  const indicador = searchParams.get("indicador") ?? "";
+
   const [coletas, setColetas] = useState<Coleta[]>([]);
   const [pesquisa, setPesquisa] = useState("");
   const [status, setStatus] = useState("");
@@ -396,7 +524,7 @@ export default function TodasAsColetasPage() {
       const { data, error } = await supabase
         .from("coletas")
         .select(
-          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, numero_nf, transportadora, data_prevista_coleta, data_coleta, status, created_at, conhecimento, valor_frete, vencimento_transportadora, status_pagamento_transportadora, data_pagamento_transportadora, situacao_pagamento_transportadora, numero_nf_cobranca_ads, data_emissao_nf_cobranca_ads, valor_nf_cobranca_ads, vencimento_nf_cobranca_ads, status_recebimento_ads, data_recebimento_pagamento_ads, situacao_recebimento",
+          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, numero_nf, data_nf, transportadora, data_envio_transportadora, data_prevista_coleta, data_coleta, data_efetiva_coleta, data_chegada_ads, status, created_at, conhecimento, valor_frete, vencimento_transportadora, status_pagamento_transportadora, data_pagamento_transportadora, situacao_pagamento_transportadora, numero_nf_cobranca_ads, data_emissao_nf_cobranca_ads, valor_nf_cobranca_ads, vencimento_nf_cobranca_ads, status_recebimento_ads, data_recebimento_pagamento_ads, situacao_recebimento",
         )
         .order("created_at", {
           ascending: false,
@@ -542,6 +670,10 @@ export default function TodasAsColetasPage() {
     const termo = pesquisa.trim().toLowerCase();
 
     return coletas.filter((coleta) => {
+      if (!pertenceAoIndicador(coleta, indicador)) {
+        return false;
+      }
+
       const statusAtual = obterStatusAtual(coleta);
 
       const correspondeStatus =
@@ -569,7 +701,7 @@ export default function TodasAsColetasPage() {
 
       return correspondeStatus && correspondePesquisa;
     });
-  }, [coletas, pesquisa, status]);
+  }, [coletas, pesquisa, status, indicador]);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -592,13 +724,25 @@ export default function TodasAsColetasPage() {
               </div>
 
               <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-                Todas as coletas
+                {indicador
+                  ? nomesIndicadores[indicador] ?? "Todas as coletas"
+                  : "Todas as coletas"}
               </h2>
 
               <p className="mt-1.5 text-sm text-slate-500">
-                Consulte, acompanhe e atualize
-                todas as operações cadastradas.
+                {indicador
+                  ? "Lista filtrada pelo indicador selecionado no painel."
+                  : "Consulte, acompanhe e atualize todas as operações cadastradas."}
               </p>
+
+              {indicador && (
+                <Link
+                  href="/coletas"
+                  className="mt-2 inline-flex text-xs font-bold text-blue-600 transition hover:text-blue-700"
+                >
+                  ← Limpar filtro do painel
+                </Link>
+              )}
             </div>
 
             <Link
@@ -643,10 +787,12 @@ export default function TodasAsColetasPage() {
               </p>
 
               <p className="mt-1 truncate text-sm font-bold text-blue-900">
-                {status ||
-                  (pesquisa
-                    ? `Busca: ${pesquisa}`
-                    : "Todos os registros")}
+                {indicador
+                  ? nomesIndicadores[indicador] ?? indicador
+                  : status ||
+                    (pesquisa
+                      ? `Busca: ${pesquisa}`
+                      : "Todos os registros")}
               </p>
             </div>
           </div>

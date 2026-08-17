@@ -39,6 +39,12 @@ export default function TransportadorasPage() {
   const [pesquisa, setPesquisa] =
     useState("");
 
+  const [pagina, setPagina] =
+    useState(1);
+
+  const [itensPorPagina, setItensPorPagina] =
+    useState(10);
+
   const [mensagem, setMensagem] =
     useState("");
 
@@ -228,16 +234,21 @@ export default function TransportadorasPage() {
     };
 
     if (transportadoraEditando) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("transportadoras")
         .update(dadosTransportadora)
         .eq(
           "id",
           transportadoraEditando.id,
-        );
+        )
+        .select()
+        .single();
 
       if (error) {
-        console.error(error);
+        console.error(
+          "Erro ao atualizar transportadora:",
+          error,
+        );
 
         setMensagem(
           `Não foi possível atualizar: ${error.message}`,
@@ -247,13 +258,28 @@ export default function TransportadorasPage() {
         return;
       }
 
+      if (!data) {
+        setMensagem(
+          "A alteração não foi gravada no banco de dados.",
+        );
+
+        setSalvando(false);
+        return;
+      }
+
+      setTransportadoras((atuais) =>
+        atuais.map((item) =>
+          item.id === data.id
+            ? (data as Transportadora)
+            : item,
+        ),
+      );
+
       setMensagem(
         "Transportadora atualizada com sucesso!",
       );
 
-      setTransportadoraEditando(
-        null,
-      );
+      setTransportadoraEditando(null);
     } else {
       const { error } = await supabase
         .from("transportadoras")
@@ -356,6 +382,69 @@ export default function TransportadorasPage() {
       },
     );
 
+  useEffect(() => {
+    setPagina(1);
+  }, [pesquisa, itensPorPagina]);
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(
+      transportadorasFiltradas.length /
+        itensPorPagina,
+    ),
+  );
+
+  const inicioPagina =
+    (pagina - 1) * itensPorPagina;
+
+  const transportadorasPaginadas =
+    transportadorasFiltradas.slice(
+      inicioPagina,
+      inicioPagina + itensPorPagina,
+    );
+
+  const inicioExibicao =
+    transportadorasFiltradas.length === 0
+      ? 0
+      : inicioPagina + 1;
+
+  const fimExibicao = Math.min(
+    inicioPagina + itensPorPagina,
+    transportadorasFiltradas.length,
+  );
+
+  const indicadores = {
+    total: transportadoras.length,
+    comPrazo: transportadoras.filter(
+      (item) => item.prazo_medio !== null,
+    ).length,
+    contatoIncompleto: transportadoras.filter(
+      (item) =>
+        !item.contato ||
+        !item.telefone ||
+        !item.email,
+    ).length,
+    prazoMedio: (() => {
+      const comPrazo = transportadoras.filter(
+        (item) =>
+          item.prazo_medio !== null,
+      );
+
+      if (comPrazo.length === 0) {
+        return 0;
+      }
+
+      return (
+        comPrazo.reduce(
+          (total, item) =>
+            total +
+            (item.prazo_medio ?? 0),
+          0,
+        ) / comPrazo.length
+      );
+    })(),
+  };
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
       <Header />
@@ -364,50 +453,116 @@ export default function TransportadorasPage() {
         <Sidebar />
 
         <section className="min-w-0 p-5 md:p-8">
-          <div className="mb-7">
-            <p className="text-sm font-medium text-emerald-700">
-              Cadastros operacionais
-            </p>
+          {/* CABEÇALHO */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+                Cadastros operacionais
+              </p>
+            </div>
 
-            <h2 className="mt-1 text-3xl font-bold">
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
               Transportadoras
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Cadastre, consulte e
-              atualize as transportadoras
-              utilizadas nas coletas.
+            <p className="mt-1.5 text-sm text-slate-500">
+              Cadastre, consulte e atualize as transportadoras utilizadas nas coletas.
             </p>
           </div>
 
           {mensagem && (
-            <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
               {mensagem}
             </div>
           )}
 
+          {/* INDICADORES */}
+          <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              [
+                "Total cadastradas",
+                indicadores.total,
+                "Transportadoras",
+                "bg-emerald-500",
+              ],
+              [
+                "Com prazo definido",
+                indicadores.comPrazo,
+                `${indicadores.total > 0
+                  ? Math.round(
+                      (indicadores.comPrazo /
+                        indicadores.total) *
+                        100,
+                    )
+                  : 0}% do total`,
+                "bg-blue-500",
+              ],
+              [
+                "Sem contato completo",
+                indicadores.contatoIncompleto,
+                "Precisam atualização",
+                "bg-amber-500",
+              ],
+              [
+                "Prazo médio",
+                indicadores.prazoMedio.toLocaleString(
+                  "pt-BR",
+                  {
+                    maximumFractionDigits: 1,
+                  },
+                ),
+                "dias",
+                "bg-violet-500",
+              ],
+            ].map(
+              ([titulo, valor, detalhe, cor]) => (
+                <article
+                  key={String(titulo)}
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${cor}`}
+                    />
+                    <p className="text-xs font-semibold text-slate-500">
+                      {titulo}
+                    </p>
+                  </div>
+
+                  <p className="mt-2 text-2xl font-black text-slate-900">
+                    {valor}
+                  </p>
+
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {detalhe}
+                  </p>
+                </article>
+              ),
+            )}
+          </section>
+
+          {/* FORMULÁRIO */}
           <form
             ref={formularioRef}
-            onSubmit={
-              salvarTransportadora
-            }
-            className="mb-7 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            onSubmit={salvarTransportadora}
+            className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-start">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
                   {transportadoraEditando
                     ? "Modo de edição"
                     : "Cadastro"}
                 </p>
 
-                <h3 className="mt-1 text-lg font-bold">
+                <h3 className="mt-1 text-lg font-bold text-slate-900">
                   {transportadoraEditando
                     ? "Editar transportadora"
                     : "Cadastrar transportadora"}
                 </h3>
 
-                <p className="text-sm text-slate-500">
+                <p className="mt-1 text-xs text-slate-500">
                   {transportadoraEditando
                     ? `Alterando os dados de ${transportadoraEditando.nome}.`
                     : "Preencha os dados da empresa responsável pelo transporte."}
@@ -416,18 +571,13 @@ export default function TransportadorasPage() {
 
               {transportadoraEditando && (
                 <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                  Editando registro #
-                  {
-                    transportadoraEditando.id
-                  }
+                  Editando registro #{transportadoraEditando.id}
                 </span>
               )}
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              <label
-                className={rotulo}
-              >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <label className={rotulo}>
                 Nome da transportadora *
                 <input
                   type="text"
@@ -438,9 +588,7 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label
-                className={rotulo}
-              >
+              <label className={rotulo}>
                 CNPJ
                 <input
                   type="text"
@@ -450,9 +598,7 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label
-                className={rotulo}
-              >
+              <label className={rotulo}>
                 Contato
                 <input
                   type="text"
@@ -462,9 +608,7 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label
-                className={rotulo}
-              >
+              <label className={rotulo}>
                 Telefone
                 <input
                   type="text"
@@ -474,9 +618,7 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label
-                className={rotulo}
-              >
+              <label className={rotulo}>
                 E-mail
                 <input
                   type="email"
@@ -486,9 +628,7 @@ export default function TransportadorasPage() {
                 />
               </label>
 
-              <label
-                className={rotulo}
-              >
+              <label className={rotulo}>
                 Prazo médio em dias
                 <input
                   type="number"
@@ -500,27 +640,23 @@ export default function TransportadorasPage() {
               </label>
             </div>
 
-            <label
-              className={`${rotulo} mt-5 block`}
-            >
+            <label className={`${rotulo} mt-4 block`}>
               Observações
               <textarea
                 name="observacoes"
-                rows={4}
+                rows={3}
                 placeholder="Regiões atendidas, horários, condições especiais..."
                 className={campo}
               />
             </label>
 
-            <div className="mt-6 flex flex-col justify-end gap-3 sm:flex-row">
+            <div className="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
               {transportadoraEditando && (
                 <button
                   type="button"
-                  onClick={
-                    cancelarEdicao
-                  }
+                  onClick={cancelarEdicao}
                   disabled={salvando}
-                  className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   Cancelar edição
                 </button>
@@ -529,7 +665,7 @@ export default function TransportadorasPage() {
               <button
                 type="submit"
                 disabled={salvando}
-                className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {salvando
                   ? "Salvando..."
@@ -540,20 +676,16 @@ export default function TransportadorasPage() {
             </div>
           </form>
 
+          {/* LISTA */}
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center">
+            <div className="flex flex-col justify-between gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center">
               <div>
-                <h3 className="text-lg font-bold">
-                  Transportadoras
-                  cadastradas
+                <h3 className="text-lg font-bold text-slate-900">
+                  Transportadoras cadastradas
                 </h3>
 
-                <p className="text-sm text-slate-500">
-                  {
-                    transportadorasFiltradas.length
-                  }{" "}
-                  registro(s)
-                  encontrado(s)
+                <p className="mt-1 text-xs text-slate-500">
+                  {transportadorasFiltradas.length} registro(s) encontrado(s)
                 </p>
               </div>
 
@@ -561,46 +693,34 @@ export default function TransportadorasPage() {
                 type="search"
                 value={pesquisa}
                 onChange={(evento) =>
-                  setPesquisa(
-                    evento.target.value,
-                  )
+                  setPesquisa(evento.target.value)
                 }
                 placeholder="Pesquisar transportadora..."
-                className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600 md:w-80"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white md:w-80"
               />
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <table className="w-full min-w-[1180px] table-fixed text-left">
+                <colgroup>
+                  <col className="w-[16%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
+
+                <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-5 py-4">
-                      Transportadora
-                    </th>
-
-                    <th className="px-5 py-4">
-                      CNPJ
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Contato
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Telefone
-                    </th>
-
-                    <th className="px-5 py-4">
-                      E-mail
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Prazo
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Ações
-                    </th>
+                    <th className="px-4 py-3.5">Transportadora</th>
+                    <th className="px-4 py-3.5">CNPJ</th>
+                    <th className="px-4 py-3.5">Contato</th>
+                    <th className="px-4 py-3.5">Telefone</th>
+                    <th className="px-4 py-3.5">E-mail</th>
+                    <th className="px-4 py-3.5">Prazo</th>
+                    <th className="px-4 py-3.5">Ações</th>
                   </tr>
                 </thead>
 
@@ -609,75 +729,70 @@ export default function TransportadorasPage() {
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-5 py-8 text-center text-slate-500"
+                        className="px-5 py-10 text-center text-slate-500"
                       >
-                        Carregando
-                        transportadoras...
+                        Carregando transportadoras...
                       </td>
                     </tr>
                   )}
 
                   {!carregando &&
-                    transportadorasFiltradas.length ===
-                      0 && (
+                    transportadorasFiltradas.length === 0 && (
                       <tr>
                         <td
                           colSpan={7}
-                          className="px-5 py-8 text-center text-slate-500"
+                          className="px-5 py-10 text-center text-slate-500"
                         >
-                          Nenhuma
-                          transportadora
-                          cadastrada.
+                          Nenhuma transportadora cadastrada.
                         </td>
                       </tr>
                     )}
 
                   {!carregando &&
-                    transportadorasFiltradas.map(
-                      (
-                        transportadora,
-                      ) => (
+                    transportadorasPaginadas.map(
+                      (transportadora) => (
                         <tr
-                          key={
-                            transportadora.id
-                          }
-                          className="transition hover:bg-slate-50"
+                          key={transportadora.id}
+                          className="transition hover:bg-slate-50/70"
                         >
-                          <td className="px-5 py-4 font-semibold text-slate-900">
-                            {
-                              transportadora.nome
-                            }
+                          <td className="px-4 py-3.5 align-middle font-bold text-slate-900">
+                            <span className="block leading-5">
+                              {transportadora.nome}
+                            </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            {transportadora.cnpj ||
-                              "—"}
+                          <td className="px-4 py-3.5 align-middle text-slate-600">
+                            <span className="block break-words leading-5">
+                              {transportadora.cnpj || "—"}
+                            </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            {transportadora.contato ||
-                              "—"}
+                          <td className="px-4 py-3.5 align-middle text-slate-700">
+                            <span className="block leading-5">
+                              {transportadora.contato || "—"}
+                            </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            {transportadora.telefone ||
-                              "—"}
+                          <td className="px-4 py-3.5 align-middle text-slate-700">
+                            <span className="block leading-5">
+                              {transportadora.telefone || "—"}
+                            </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            {transportadora.email ||
-                              "—"}
+                          <td className="px-4 py-3.5 align-middle text-slate-700">
+                            <span className="block break-all leading-5">
+                              {transportadora.email || "—"}
+                            </span>
                           </td>
 
-                          <td className="px-5 py-4">
-                            {transportadora.prazo_medio !==
-                            null
+                          <td className="px-4 py-3.5 align-middle text-slate-700">
+                            {transportadora.prazo_medio !== null
                               ? `${transportadora.prazo_medio} dia(s)`
                               : "—"}
                           </td>
 
-                          <td className="px-5 py-4">
-                            <div className="flex flex-wrap gap-2">
+                          <td className="px-4 py-3.5 align-middle">
+                            <div className="flex flex-nowrap items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -685,7 +800,7 @@ export default function TransportadorasPage() {
                                     transportadora,
                                   )
                                 }
-                                className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                                className="whitespace-nowrap rounded-lg bg-slate-700 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-slate-800"
                               >
                                 Visualizar
                               </button>
@@ -697,7 +812,7 @@ export default function TransportadorasPage() {
                                     transportadora,
                                   )
                                 }
-                                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                                className="whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
                               >
                                 Editar
                               </button>
@@ -710,7 +825,7 @@ export default function TransportadorasPage() {
                                     transportadora.nome,
                                   )
                                 }
-                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+                                className="whitespace-nowrap rounded-lg bg-red-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-red-700"
                               >
                                 Excluir
                               </button>
@@ -722,6 +837,104 @@ export default function TransportadorasPage() {
                 </tbody>
               </table>
             </div>
+
+            {!carregando &&
+              transportadorasFiltradas.length > 0 && (
+                <div className="flex flex-col justify-between gap-3 border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-xs text-slate-500">
+                      Mostrando{" "}
+                      <span className="font-bold text-slate-700">
+                        {inicioExibicao}
+                      </span>{" "}
+                      a{" "}
+                      <span className="font-bold text-slate-700">
+                        {fimExibicao}
+                      </span>{" "}
+                      de{" "}
+                      <span className="font-bold text-slate-700">
+                        {transportadorasFiltradas.length}
+                      </span>
+                    </p>
+
+                    <select
+                      value={itensPorPagina}
+                      onChange={(evento) =>
+                        setItensPorPagina(
+                          Number(
+                            evento.target.value,
+                          ),
+                        )
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500"
+                    >
+                      <option value={10}>
+                        10 por página
+                      </option>
+                      <option value={20}>
+                        20 por página
+                      </option>
+                      <option value={30}>
+                        30 por página
+                      </option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPagina((atual) =>
+                          Math.max(1, atual - 1),
+                        )
+                      }
+                      disabled={pagina === 1}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Anterior
+                    </button>
+
+                    {Array.from(
+                      { length: totalPaginas },
+                      (_, indice) => indice + 1,
+                    ).map((numero) => (
+                      <button
+                        key={numero}
+                        type="button"
+                        onClick={() =>
+                          setPagina(numero)
+                        }
+                        className={[
+                          "flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-bold transition",
+                          pagina === numero
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100",
+                        ].join(" ")}
+                      >
+                        {numero}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPagina((atual) =>
+                          Math.min(
+                            totalPaginas,
+                            atual + 1,
+                          ),
+                        )
+                      }
+                      disabled={
+                        pagina === totalPaginas
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              )}
           </article>
         </section>
       </div>

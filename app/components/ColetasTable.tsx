@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 type Coleta = {
@@ -100,19 +101,14 @@ const nomesIndicadores: Record<string, string> = {
 };
 
 export default function ColetasTable() {
-  const [indicador, setIndicador] = useState("");
+  const searchParams = useSearchParams();
+  const indicador = searchParams.get("indicador") ?? "";
 
   const [coletas, setColetas] = useState<Coleta[]>([]);
   const [pesquisa, setPesquisa] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [excluindoId, setExcluindoId] = useState<number | null>(null);
-
-  useEffect(() => {
-    const parametros = new URLSearchParams(window.location.search);
-
-    setIndicador(parametros.get("indicador") ?? "");
-  }, []);
 
   useEffect(() => {
     async function carregarColetas() {
@@ -333,9 +329,16 @@ export default function ColetasTable() {
     nomesIndicadores[indicador] ??
     "Coletas recentes";
 
+  // No painel principal mostramos somente as 5 coletas mais recentes.
+  // Quando um indicador é selecionado, mantemos todos os registros correspondentes.
+  const coletasExibidas =
+    indicador || pesquisa.trim()
+      ? coletasFiltradas
+      : coletasFiltradas.slice(0, 5);
+
   return (
-    <article className="mt-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center">
+    <article className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col justify-between gap-3 border-b border-slate-200 px-4 py-3 md:flex-row md:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-bold">
@@ -374,7 +377,7 @@ export default function ColetasTable() {
             setPesquisa(evento.target.value)
           }
           placeholder="Pesquisar OV, NF, cliente ou unidade..."
-          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-emerald-600 md:w-80"
+          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-2 text-sm outline-none focus:border-emerald-600 md:w-80"
         />
       </div>
 
@@ -388,23 +391,23 @@ export default function ColetasTable() {
         <table className="w-full min-w-[1050px] text-left">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              <th className="px-5 py-4">OV</th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">OV</th>
+              <th className="px-4 py-3">
                 Cliente / Unidade
               </th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">
                 Nota fiscal
               </th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">
                 Transportadora
               </th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">
                 Data da coleta
               </th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">
                 Status
               </th>
-              <th className="px-5 py-4">
+              <th className="px-4 py-3">
                 Ações
               </th>
             </tr>
@@ -414,7 +417,7 @@ export default function ColetasTable() {
             {carregando && (
               <tr>
                 <td
-                  className="px-5 py-8 text-center text-slate-500"
+                  className="px-4 py-6 text-center text-slate-500"
                   colSpan={7}
                 >
                   Carregando coletas...
@@ -426,7 +429,7 @@ export default function ColetasTable() {
               coletasFiltradas.length === 0 && (
                 <tr>
                   <td
-                    className="px-5 py-8 text-center text-slate-500"
+                    className="px-4 py-6 text-center text-slate-500"
                     colSpan={7}
                   >
                     Nenhuma coleta encontrada para
@@ -436,17 +439,17 @@ export default function ColetasTable() {
               )}
 
             {!carregando &&
-              coletasFiltradas.map((coleta) => (
+              coletasExibidas.map((coleta) => (
                 <tr
                   key={coleta.id}
                   className="transition hover:bg-slate-50"
                 >
-                  <td className="px-5 py-4 font-semibold text-emerald-700">
+                  <td className="px-4 py-3 font-semibold text-emerald-700">
                     {coleta.numero_ov ||
                       `#${coleta.id}`}
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <p className="font-medium">
                       {coleta.cliente ||
                         "Cliente não informado"}
@@ -464,17 +467,17 @@ export default function ColetasTable() {
                     </p>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     {coleta.numero_nf ||
                       "Aguardando"}
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     {coleta.transportadora ||
                       "Não definida"}
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     {formatarData(
                       coleta.data_efetiva_coleta ||
                         coleta.data_coleta ||
@@ -482,9 +485,9 @@ export default function ColetasTable() {
                     )}
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <span
-                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${classeStatus(
+                      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${classeStatus(
                         coleta.status,
                       )}`}
                     >
@@ -493,11 +496,11 @@ export default function ColetasTable() {
                     </span>
                   </td>
 
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Link
                         href={`/coletas/${coleta.id}/editar`}
-                        className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                        className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-blue-700"
                       >
                         Editar
                       </Link>
@@ -510,7 +513,7 @@ export default function ColetasTable() {
                         disabled={
                           excluindoId === coleta.id
                         }
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {excluindoId === coleta.id
                           ? "Excluindo..."
@@ -523,6 +526,21 @@ export default function ColetasTable() {
           </tbody>
         </table>
       </div>
+
+      {!indicador && !pesquisa.trim() && coletasFiltradas.length > 5 && (
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <p className="text-xs text-slate-500">
+            Exibindo as 5 coletas mais recentes
+          </p>
+
+          <Link
+            href="/coletas"
+            className="text-xs font-bold text-emerald-700 transition hover:text-emerald-800"
+          >
+            Ver todas as coletas →
+          </Link>
+        </div>
+      )}
     </article>
   );
 }

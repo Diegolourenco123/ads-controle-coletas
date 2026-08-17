@@ -519,6 +519,12 @@ export default function CentralAlertas() {
   const [erro, setErro] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [pesquisa, setPesquisa] = useState("");
+  const [prioridadeFiltro, setPrioridadeFiltro] = useState<
+    "todas" | Prioridade
+  >("todas");
+  const [pagina, setPagina] = useState(1);
+
+  const ITENS_POR_PAGINA = 8;
 
   useEffect(() => {
     async function carregarColetas() {
@@ -630,6 +636,13 @@ export default function CentralAlertas() {
         return false;
       }
 
+      if (
+        prioridadeFiltro !== "todas" &&
+        alerta.prioridade !== prioridadeFiltro
+      ) {
+        return false;
+      }
+
       if (!termo) {
         return true;
       }
@@ -647,54 +660,166 @@ export default function CentralAlertas() {
 
       return conteudo.includes(termo);
     });
-  }, [alertas, filtro, pesquisa]);
+  }, [
+    alertas,
+    filtro,
+    pesquisa,
+    prioridadeFiltro,
+  ]);
+
+  useEffect(() => {
+    setPagina(1);
+  }, [filtro, pesquisa, prioridadeFiltro]);
+
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(
+      alertasFiltrados.length / ITENS_POR_PAGINA,
+    ),
+  );
+
+  const alertasPaginados = useMemo(() => {
+    const inicio = (pagina - 1) * ITENS_POR_PAGINA;
+
+    return alertasFiltrados.slice(
+      inicio,
+      inicio + ITENS_POR_PAGINA,
+    );
+  }, [alertasFiltrados, pagina]);
+
+  function limparFiltros() {
+    setFiltro("todos");
+    setPrioridadeFiltro("todas");
+    setPesquisa("");
+    setPagina(1);
+  }
+
+  function atrasoDoAlerta(alerta: Alerta) {
+    const titulo = normalizarTexto(alerta.titulo);
+
+    if (
+      !titulo.includes("vencid") &&
+      !titulo.includes("atrasad")
+    ) {
+      return "—";
+    }
+
+    const dias = diferencaEmDias(alerta.dataReferencia);
+
+    if (dias <= 0) {
+      return "Hoje";
+    }
+
+    return `+${dias} ${dias === 1 ? "dia" : "dias"}`;
+  }
+
+  function classeCategoria(
+    categoria: Alerta["categoria"],
+  ) {
+    if (categoria === "Financeiro ADS") {
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    }
+
+    if (categoria === "Transportadora") {
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    }
+
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
 
   const filtros = [
     {
       id: "todos" as Filtro,
       titulo: "Todos",
       valor: contadores.total,
+      detalhe: "Pendências ativas",
+      cor:
+        "border-emerald-100 bg-emerald-50/60 text-emerald-900",
+      bolinha: "bg-emerald-500",
     },
     {
       id: "criticos" as Filtro,
       titulo: "Críticos",
       valor: contadores.criticos,
+      detalhe: "Atenção imediata",
+      cor: "border-red-100 bg-red-50/60 text-red-900",
+      bolinha: "bg-red-500",
     },
     {
       id: "operacao" as Filtro,
       titulo: "Operação",
       valor: contadores.operacao,
+      detalhe: "Pendências operacionais",
+      cor: "border-blue-100 bg-blue-50/60 text-blue-900",
+      bolinha: "bg-blue-500",
     },
     {
       id: "transportadora" as Filtro,
       titulo: "Transportadoras",
       valor: contadores.transportadora,
+      detalhe: "CT-es em acompanhamento",
+      cor:
+        "border-violet-100 bg-violet-50/60 text-violet-900",
+      bolinha: "bg-violet-500",
     },
     {
       id: "financeiroAds" as Filtro,
       titulo: "Financeiro ADS",
       valor: contadores.financeiroAds,
+      detalhe: "Cobranças em aberto",
+      cor:
+        "border-amber-100 bg-amber-50/60 text-amber-900",
+      bolinha: "bg-amber-500",
     },
   ];
 
+  const inicioExibicao =
+    alertasFiltrados.length === 0
+      ? 0
+      : (pagina - 1) * ITENS_POR_PAGINA + 1;
+
+  const fimExibicao = Math.min(
+    pagina * ITENS_POR_PAGINA,
+    alertasFiltrados.length,
+  );
+
   return (
-    <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-600">
+    <section className="space-y-5">
+      {/* CABEÇALHO */}
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
               Centro de inteligência operacional
             </p>
-
-            <h2 className="mt-2 text-3xl font-black text-slate-900">
-              Central de Alertas
-            </h2>
-
-            <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Pendências operacionais e financeiras que exigem
-              acompanhamento da equipe.
-            </p>
           </div>
+
+          <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+            Central de Alertas
+          </h2>
+
+          <p className="mt-1.5 text-sm text-slate-500">
+            Pendências operacionais e financeiras que exigem
+            acompanhamento da equipe.
+          </p>
+        </div>
+
+        <div className="relative w-full lg:w-[340px]">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
 
           <input
             type="search"
@@ -703,12 +828,13 @@ export default function CentralAlertas() {
               setPesquisa(evento.target.value)
             }
             placeholder="Pesquisar OV, cliente ou alerta..."
-            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-600 lg:w-80"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
           />
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* INDICADORES */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {filtros.map((item) => {
           const ativo = filtro === item.id;
 
@@ -718,137 +844,352 @@ export default function CentralAlertas() {
               type="button"
               onClick={() => setFiltro(item.id)}
               className={[
-                "rounded-2xl border p-4 text-left shadow-sm transition",
+                "group rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                item.cor,
                 ativo
-                  ? "border-emerald-600 bg-emerald-600 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300",
+                  ? "ring-2 ring-emerald-500 ring-offset-2"
+                  : "",
               ].join(" ")}
             >
-              <p className="text-sm font-semibold">
-                {item.titulo}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${item.bolinha}`}
+                    />
+                    <p className="text-xs font-bold text-slate-700">
+                      {item.titulo}
+                    </p>
+                  </div>
 
-              <p className="mt-2 text-3xl font-black">
-                {carregando
-                  ? "..."
-                  : String(item.valor).padStart(2, "0")}
-              </p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">
+                    {carregando
+                      ? "..."
+                      : String(item.valor).padStart(2, "0")}
+                  </p>
+
+                  <p className="mt-1 text-[11px] font-medium text-slate-500">
+                    {item.detalhe}
+                  </p>
+                </div>
+
+                {ativo && (
+                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 shadow-sm">
+                    Ativo
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
-      {erro && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-700">
-          {erro}
+      {/* PAINEL DE FILTROS + TABELA */}
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-slate-50/50 px-5 py-4 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select
+              value={filtro}
+              onChange={(evento) =>
+                setFiltro(evento.target.value as Filtro)
+              }
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-emerald-500"
+            >
+              <option value="todos">Todos os tipos</option>
+              <option value="criticos">Somente críticos</option>
+              <option value="operacao">Operação</option>
+              <option value="transportadora">
+                Transportadoras
+              </option>
+              <option value="financeiroAds">
+                Financeiro ADS
+              </option>
+            </select>
+
+            <select
+              value={prioridadeFiltro}
+              onChange={(evento) =>
+                setPrioridadeFiltro(
+                  evento.target.value as
+                    | "todas"
+                    | Prioridade,
+                )
+              }
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-emerald-500"
+            >
+              <option value="todas">
+                Todas as prioridades
+              </option>
+              <option value="critica">Crítica</option>
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="informativa">
+                Informativa
+              </option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={limparFiltros}
+            className="w-fit text-xs font-bold text-slate-500 transition hover:text-slate-900"
+          >
+            Limpar filtros
+          </button>
         </div>
-      )}
 
-      {carregando && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
-          Carregando alertas...
-        </div>
-      )}
+        {erro && (
+          <div className="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {erro}
+          </div>
+        )}
 
-      {!carregando &&
-        !erro &&
-        alertasFiltrados.length === 0 && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center shadow-sm">
-            <p className="text-lg font-bold text-emerald-800">
-              Nenhum alerta encontrado
-            </p>
-
-            <p className="mt-2 text-sm text-emerald-700">
-              Não existem pendências correspondentes ao filtro
-              selecionado.
+        {carregando && (
+          <div className="px-5 py-16 text-center">
+            <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              Carregando alertas...
             </p>
           </div>
         )}
 
-      {!carregando &&
-        !erro &&
-        alertasFiltrados.length > 0 && (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {alertasFiltrados.map((alerta) => {
-              const visual = configurarPrioridade(
-                alerta.prioridade,
-              );
+        {!carregando &&
+          !erro &&
+          alertasFiltrados.length === 0 && (
+            <div className="px-5 py-16 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                ✓
+              </div>
 
-              return (
-                <article
-                  key={alerta.id}
-                  className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm ${visual.card}`}
-                >
-                  <div
-                    className={`absolute bottom-0 left-0 top-0 w-1.5 ${visual.faixa}`}
-                  />
+              <p className="mt-4 font-bold text-slate-800">
+                Nenhum alerta encontrado
+              </p>
 
-                  <div className="pl-3">
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-bold ${visual.selo}`}
-                          >
-                            {visual.nome}
-                          </span>
+              <p className="mt-1 text-sm text-slate-500">
+                Não existem pendências correspondentes aos
+                filtros selecionados.
+              </p>
+            </div>
+          )}
 
-                          <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-600">
-                            {alerta.categoria}
-                          </span>
-                        </div>
+        {!carregando &&
+          !erro &&
+          alertasFiltrados.length > 0 && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1120px] text-left">
+                  <thead className="border-b border-slate-200 bg-white">
+                    <tr>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Prioridade
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Tipo
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Alerta
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Referência
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Data
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Atraso
+                      </th>
+                      <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
 
-                        <h3
-                          className={`mt-3 text-lg font-bold ${visual.titulo}`}
+                  <tbody className="divide-y divide-slate-100">
+                    {alertasPaginados.map((alerta) => {
+                      const visual =
+                        configurarPrioridade(
+                          alerta.prioridade,
+                        );
+
+                      const atraso =
+                        atrasoDoAlerta(alerta);
+
+                      return (
+                        <tr
+                          key={alerta.id}
+                          className="transition hover:bg-slate-50/70"
                         >
-                          {alerta.titulo}
-                        </h3>
-                      </div>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${visual.selo}`}
+                            >
+                              {visual.nome}
+                            </span>
+                          </td>
 
-                      <div
-                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-black ${visual.circulo}`}
-                      >
-                        !
-                      </div>
-                    </div>
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <span
+                              className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${classeCategoria(
+                                alerta.categoria,
+                              )}`}
+                            >
+                              {alerta.categoria}
+                            </span>
+                          </td>
 
-                    <p className="mt-3 text-sm leading-6 text-slate-700">
-                      {alerta.descricao}
-                    </p>
+                          <td className="px-5 py-4">
+                            <p className="text-sm font-bold text-slate-800">
+                              {alerta.titulo}
+                            </p>
 
-                    <div className="mt-4 rounded-xl border border-white/70 bg-white/60 p-4">
-                      <p className="font-bold text-slate-900">
-                        {alerta.numeroOv}
-                      </p>
+                            <p className="mt-1 max-w-[320px] text-xs leading-5 text-slate-500">
+                              {alerta.descricao}
+                            </p>
+                          </td>
 
-                      <p className="mt-1 text-sm font-medium text-slate-700">
-                        {alerta.cliente}
-                      </p>
+                          <td className="px-5 py-4">
+                            <p className="text-sm font-black text-slate-800">
+                              {alerta.numeroOv}
+                            </p>
 
-                      <p className="mt-1 text-xs text-slate-500">
-                        {alerta.localizacao}
-                      </p>
-                    </div>
+                            <p className="mt-1 max-w-[270px] text-xs leading-5 text-slate-500">
+                              {alerta.cliente}
+                            </p>
 
-                    <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                      <p className="text-xs font-semibold text-slate-500">
-                        Referência:{" "}
-                        {formatarData(alerta.dataReferencia)}
-                      </p>
+                            <p className="mt-0.5 text-[11px] text-slate-400">
+                              {alerta.localizacao}
+                            </p>
+                          </td>
 
-                      <Link
-                        href={`/coletas/${alerta.coletaId}/editar`}
-                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-center text-xs font-bold text-white transition hover:bg-slate-700"
-                      >
-                        Abrir coleta
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
+                          <td className="whitespace-nowrap px-5 py-4 text-xs font-semibold text-slate-600">
+                            {formatarData(
+                              alerta.dataReferencia,
+                            )}
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <span
+                              className={[
+                                "text-xs font-black",
+                                atraso !== "—"
+                                  ? "text-red-600"
+                                  : "text-slate-400",
+                              ].join(" ")}
+                            >
+                              {atraso}
+                            </span>
+                          </td>
+
+                          <td className="whitespace-nowrap px-5 py-4">
+                            <Link
+                              href={`/coletas/${alerta.coletaId}/editar`}
+                              className="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                            >
+                              Abrir coleta
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col justify-between gap-3 border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center">
+                <p className="text-xs text-slate-500">
+                  Mostrando{" "}
+                  <span className="font-bold text-slate-700">
+                    {inicioExibicao}
+                  </span>{" "}
+                  a{" "}
+                  <span className="font-bold text-slate-700">
+                    {fimExibicao}
+                  </span>{" "}
+                  de{" "}
+                  <span className="font-bold text-slate-700">
+                    {alertasFiltrados.length}
+                  </span>{" "}
+                  alerta(s)
+                </p>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPagina((atual) =>
+                        Math.max(1, atual - 1),
+                      )
+                    }
+                    disabled={pagina === 1}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ‹
+                  </button>
+
+                  {Array.from(
+                    { length: totalPaginas },
+                    (_, indice) => indice + 1,
+                  )
+                    .filter(
+                      (numero) =>
+                        numero === 1 ||
+                        numero === totalPaginas ||
+                        Math.abs(numero - pagina) <= 1,
+                    )
+                    .map((numero, indice, lista) => {
+                      const anterior =
+                        lista[indice - 1];
+
+                      return (
+                        <div
+                          key={numero}
+                          className="flex items-center gap-1.5"
+                        >
+                          {anterior &&
+                            numero - anterior > 1 && (
+                              <span className="px-1 text-xs text-slate-400">
+                                …
+                              </span>
+                            )}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPagina(numero)
+                            }
+                            className={[
+                              "flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-bold transition",
+                              pagina === numero
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100",
+                            ].join(" ")}
+                          >
+                            {numero}
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPagina((atual) =>
+                        Math.min(
+                          totalPaginas,
+                          atual + 1,
+                        ),
+                      )
+                    }
+                    disabled={pagina === totalPaginas}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+      </article>
     </section>
   );
 }

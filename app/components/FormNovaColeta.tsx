@@ -47,13 +47,13 @@ type TransportadoraMestre = {
 };
 
 const campo =
-  "mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
+  "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
 
 const rotulo =
-  "text-sm font-semibold text-slate-700";
+  "text-[13px] font-semibold text-slate-700";
 
 const campoArquivo =
-  "mt-2 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200";
+  "mt-1.5 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200";
 
 const BUCKET_DOCUMENTOS = "documentos-coletas";
 const LIMITE_ARQUIVO = 10 * 1024 * 1024;
@@ -1392,11 +1392,11 @@ export default function FormNovaColeta() {
     aba: Aba,
   ) {
     return [
-      "relative rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200",
+      "relative flex items-center justify-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold transition-all duration-200",
 
       abaAtiva === aba
-        ? "bg-slate-950 text-white shadow-sm ring-1 ring-slate-900"
-        : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+        ? "border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-900/10"
+        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900",
     ].join(" ");
   }
 
@@ -1422,7 +1422,7 @@ export default function FormNovaColeta() {
     <form
       ref={formularioRef}
       onSubmit={salvarColeta}
-      className="space-y-5"
+      className="space-y-4"
     >
       {mensagem && (
         <div
@@ -1439,8 +1439,38 @@ export default function FormNovaColeta() {
         </div>
       )}
 
-      <nav className="rounded-[22px] border border-slate-200 bg-white p-2.5 shadow-sm shadow-slate-200/50">
-        <div className="grid gap-3 md:grid-cols-3">
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              Fluxo da coleta
+            </p>
+            <p className="mt-1 text-sm font-semibold text-slate-800">
+              Solicitação → OV / NF → Transportadora → Coleta → Recebimento
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              "1 Solicitação",
+              "2 OV / NF",
+              "3 Transportadora",
+              "4 Coleta",
+              "5 Recebimento",
+            ].map((etapa) => (
+              <span
+                key={etapa}
+                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600"
+              >
+                {etapa}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <nav className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="grid gap-2 md:grid-cols-3">
           <button
             type="button"
             onClick={() =>
@@ -1452,7 +1482,10 @@ export default function FormNovaColeta() {
               "operacao",
             )}
           >
-            Operação
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-[11px] font-black">
+              01
+            </span>
+            <span>Operação</span>
           </button>
 
           <button
@@ -1466,8 +1499,10 @@ export default function FormNovaColeta() {
               "transportadora",
             )}
           >
-            Financeiro —
-            Transportadora
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] font-black text-slate-600">
+              02
+            </span>
+            <span>Financeiro — Transportadora</span>
           </button>
 
           <button
@@ -1481,7 +1516,10 @@ export default function FormNovaColeta() {
               "ads",
             )}
           >
-            Financeiro — ADS
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] font-black text-slate-600">
+              03
+            </span>
+            <span>Financeiro — ADS</span>
           </button>
         </div>
       </nav>
@@ -1490,17 +1528,17 @@ export default function FormNovaColeta() {
         className={
           abaAtiva ===
           "operacao"
-            ? "space-y-6"
+            ? "space-y-4"
             : "hidden"
         }
       >
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 1
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Solicitação do cliente
             </h3>
 
@@ -1510,7 +1548,7 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label
               className={
                 rotulo
@@ -1835,13 +1873,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 2
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Ordem de Visita e Nota Fiscal
             </h3>
 
@@ -1851,7 +1889,7 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className={rotulo}>
               Data da OV
               <input
@@ -1917,13 +1955,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapa 3
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Solicitação à transportadora
             </h3>
 
@@ -1933,8 +1971,8 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="space-y-6">
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div
                 ref={autocompleteTransportadoraRef}
                 className="relative xl:col-span-2"
@@ -2088,7 +2126,7 @@ export default function FormNovaColeta() {
               </label>
             </div>
 
-            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <label className={rotulo}>
                 Contato
                 <input
@@ -2121,7 +2159,7 @@ export default function FormNovaColeta() {
             </div>
 
             <div>
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
                 <p className="text-sm font-semibold text-emerald-800">
                   Status operacional automático
                 </p>
@@ -2136,13 +2174,13 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
               Etapas 4 e 5
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Coleta realizada e recebimento na ADS
             </h3>
 
@@ -2152,7 +2190,7 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className={rotulo}>
               Data efetiva da coleta
               <input
@@ -2228,12 +2266,12 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/40">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <label className={rotulo}>
             Observações operacionais
             <textarea
               name="observacoes"
-              rows={5}
+              rows={3}
               placeholder="Digite informações adicionais sobre a coleta..."
               className={campo}
             />
@@ -2244,17 +2282,17 @@ export default function FormNovaColeta() {
       <div
         className={
           abaAtiva === "transportadora"
-            ? "space-y-6"
+            ? "space-y-4"
             : "hidden"
         }
       >
-        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
               Financeiro — Transportadora
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Pagamento do frete e do CT-e
             </h3>
 
@@ -2264,7 +2302,7 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className={rotulo}>
               Valor do frete
               <input
@@ -2335,12 +2373,12 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
+        <article className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
           <label className={rotulo}>
             Observações do pagamento da transportadora
             <textarea
               name="observacoesPagamentoTransportadora"
-              rows={5}
+              rows={3}
               placeholder="Informe boleto, contestação, comprovante ou outros detalhes..."
               className={campo}
             />
@@ -2351,17 +2389,17 @@ export default function FormNovaColeta() {
       <div
         className={
           abaAtiva === "ads"
-            ? "space-y-6"
+            ? "space-y-4"
             : "hidden"
         }
       >
-        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
-          <div className="mb-6">
+        <article className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="mb-4">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">
               Financeiro — ADS
             </p>
 
-            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900">
+            <h3 className="mt-1.5 text-lg font-bold tracking-tight text-slate-900">
               Nota Fiscal de cobrança ao cliente
             </h3>
 
@@ -2371,7 +2409,7 @@ export default function FormNovaColeta() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className={rotulo}>
               Número da NF de cobrança
               <input
@@ -2469,12 +2507,12 @@ export default function FormNovaColeta() {
           </div>
         </article>
 
-        <article className="rounded-[24px] border border-blue-200 bg-white p-6 shadow-sm shadow-slate-200/40">
+        <article className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
           <label className={rotulo}>
             Observações da cobrança ADS
             <textarea
               name="observacoesCobrancaAds"
-              rows={5}
+              rows={3}
               placeholder="Informe boleto, comprovante, negociação ou outros detalhes..."
               className={campo}
             />
@@ -2482,10 +2520,20 @@ export default function FormNovaColeta() {
         </article>
       </div>
 
-      <div className="sticky bottom-4 z-30 flex flex-col-reverse justify-end gap-3 rounded-[22px] border border-slate-200 bg-white/95 p-4 shadow-lg shadow-slate-900/10 backdrop-blur sm:flex-row">
+      <div className="sticky bottom-4 z-30 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-xl shadow-slate-900/10 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+        <div className="hidden sm:block">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Cadastro operacional
+          </p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-600">
+            O status da coleta será calculado automaticamente ao salvar.
+          </p>
+        </div>
+
+        <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
         <Link
           href="/"
-          className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+          className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
         >
           Cancelar
         </Link>
@@ -2506,7 +2554,7 @@ export default function FormNovaColeta() {
             setListaTransportadorasAberta(false);
           }}
           disabled={salvando}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Limpar formulário
         </button>
@@ -2514,12 +2562,13 @@ export default function FormNovaColeta() {
         <button
           type="submit"
           disabled={salvando}
-          className="rounded-xl bg-emerald-600 px-7 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
         >
           {salvando
             ? "Salvando..."
             : "Salvar coleta"}
         </button>
+        </div>
       </div>
     </form>
   );

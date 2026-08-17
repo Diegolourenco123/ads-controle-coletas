@@ -143,6 +143,9 @@ export default function AgendaOperacional() {
   const [erro, setErro] = useState("");
   const [filtro, setFiltro] = useState<FiltroAgenda>("hoje");
   const [pesquisa, setPesquisa] = useState("");
+  const [pagina, setPagina] = useState(1);
+
+  const ITENS_POR_PAGINA = 10;
 
   useEffect(() => {
     async function carregarColetas() {
@@ -273,6 +276,7 @@ export default function AgendaOperacional() {
         item.coleta.cidade,
         item.coleta.estado,
         item.coleta.transportadora,
+        item.coleta.status,
       ]
         .filter(Boolean)
         .join(" ")
@@ -282,79 +286,160 @@ export default function AgendaOperacional() {
     });
   }, [itensAgenda, filtro, pesquisa]);
 
-  const agendaPorData = useMemo(() => {
-    const grupos = new Map<string, ItemAgenda[]>();
+  useEffect(() => {
+    setPagina(1);
+  }, [filtro, pesquisa]);
 
-    itensFiltrados.forEach((item) => {
-      const chave = item.dataOriginal;
-      const grupo = grupos.get(chave) ?? [];
-      grupo.push(item);
-      grupos.set(chave, grupo);
-    });
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(itensFiltrados.length / ITENS_POR_PAGINA),
+  );
 
-    return [...grupos.entries()].sort(
-      ([dataA], [dataB]) =>
-        (criarDataLocal(dataA)?.getTime() ?? 0) -
-        (criarDataLocal(dataB)?.getTime() ?? 0),
+  const itensPaginados = useMemo(() => {
+    const inicio = (pagina - 1) * ITENS_POR_PAGINA;
+
+    return itensFiltrados.slice(
+      inicio,
+      inicio + ITENS_POR_PAGINA,
     );
-  }, [itensFiltrados]);
+  }, [itensFiltrados, pagina]);
+
+  function situacaoItem(item: ItemAgenda) {
+    if (item.atrasada) {
+      const dias = Math.abs(item.diasDiferenca);
+
+      return {
+        texto: `${dias} ${dias === 1 ? "dia" : "dias"} em atraso`,
+        badge: "border-red-200 bg-red-50 text-red-700",
+        ponto: "bg-red-500",
+      };
+    }
+
+    if (item.hoje) {
+      return {
+        texto: "Hoje",
+        badge: "border-blue-200 bg-blue-50 text-blue-700",
+        ponto: "bg-blue-500",
+      };
+    }
+
+    if (item.amanha) {
+      return {
+        texto: "Amanhã",
+        badge: "border-violet-200 bg-violet-50 text-violet-700",
+        ponto: "bg-violet-500",
+      };
+    }
+
+    return {
+      texto: `Em ${item.diasDiferenca} dias`,
+      badge: "border-slate-200 bg-slate-50 text-slate-600",
+      ponto: "bg-slate-400",
+    };
+  }
 
   const filtros = [
-    { id: "hoje" as FiltroAgenda, titulo: "Hoje", valor: contadores.hoje },
+    {
+      id: "hoje" as FiltroAgenda,
+      titulo: "Hoje",
+      valor: contadores.hoje,
+      detalhe: "Programação do dia",
+      cor: "border-emerald-100 bg-emerald-50/60",
+      bolinha: "bg-emerald-500",
+    },
     {
       id: "amanha" as FiltroAgenda,
       titulo: "Amanhã",
       valor: contadores.amanha,
+      detalhe: "Próximo dia",
+      cor: "border-blue-100 bg-blue-50/60",
+      bolinha: "bg-blue-500",
     },
     {
       id: "semana" as FiltroAgenda,
       titulo: "Próximos 7 dias",
       valor: contadores.semana,
+      detalhe: "Programação próxima",
+      cor: "border-violet-100 bg-violet-50/60",
+      bolinha: "bg-violet-500",
     },
     {
       id: "atrasadas" as FiltroAgenda,
       titulo: "Atrasadas",
       valor: contadores.atrasadas,
+      detalhe: "Exigem atenção",
+      cor: "border-red-100 bg-red-50/60",
+      bolinha: "bg-red-500",
     },
     {
       id: "todas" as FiltroAgenda,
       titulo: "Todas",
       valor: contadores.todas,
+      detalhe: "Agenda completa",
+      cor: "border-slate-200 bg-white",
+      bolinha: "bg-slate-400",
     },
   ];
 
+  const inicioExibicao =
+    itensFiltrados.length === 0
+      ? 0
+      : (pagina - 1) * ITENS_POR_PAGINA + 1;
+
+  const fimExibicao = Math.min(
+    pagina * ITENS_POR_PAGINA,
+    itensFiltrados.length,
+  );
+
   return (
-    <section className="space-y-6">
-      <article className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 text-white shadow-sm">
-        <div className="h-1.5 bg-emerald-500" />
+    <section className="space-y-5">
+      {/* CABEÇALHO */}
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
 
-        <div className="flex flex-col justify-between gap-6 p-6 lg:flex-row lg:items-end lg:p-8">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-400">
-              Centro de Inteligência Operacional
-            </p>
-
-            <h2 className="mt-3 text-3xl font-black">
-              Agenda Operacional
-            </h2>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Acompanhe coletas previstas, atrasos e a programação dos
-              próximos dias.
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              Centro de inteligência operacional
             </p>
           </div>
+
+          <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+            Agenda Operacional
+          </h2>
+
+          <p className="mt-1.5 text-sm text-slate-500">
+            Acompanhe coletas previstas, atrasos e a programação dos próximos dias.
+          </p>
+        </div>
+
+        <div className="relative w-full lg:w-[360px]">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
 
           <input
             type="search"
             value={pesquisa}
             onChange={(evento) => setPesquisa(evento.target.value)}
             placeholder="Pesquisar OV, cliente ou transportadora..."
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-500 lg:w-96"
+            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
           />
         </div>
-      </article>
+      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* INDICADORES */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {filtros.map((item) => {
           const ativo = filtro === item.id;
 
@@ -364,170 +449,298 @@ export default function AgendaOperacional() {
               type="button"
               onClick={() => setFiltro(item.id)}
               className={[
-                "rounded-2xl border p-5 text-left shadow-sm transition",
+                "rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                item.cor,
                 ativo
-                  ? "border-emerald-600 bg-emerald-600 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300",
+                  ? "ring-2 ring-emerald-500 ring-offset-2"
+                  : "",
               ].join(" ")}
             >
-              <p className="text-sm font-semibold">{item.titulo}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${item.bolinha}`}
+                    />
 
-              <p className="mt-2 text-3xl font-black">
-                {carregando ? "..." : String(item.valor).padStart(2, "0")}
-              </p>
+                    <p className="text-xs font-bold text-slate-700">
+                      {item.titulo}
+                    </p>
+                  </div>
+
+                  <p className="mt-2 text-3xl font-black text-slate-900">
+                    {carregando
+                      ? "..."
+                      : String(item.valor).padStart(2, "0")}
+                  </p>
+
+                  <p className="mt-1 text-[11px] font-medium text-slate-500">
+                    {item.detalhe}
+                  </p>
+                </div>
+
+                {ativo && (
+                  <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 shadow-sm">
+                    Ativo
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
-      {erro && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-700">
-          {erro}
+      {/* TABELA */}
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-sm font-bold text-slate-800">
+              Programação de coletas
+            </p>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Visualize rapidamente datas, responsáveis e situações da agenda.
+            </p>
+          </div>
+
+          <select
+            value={filtro}
+            onChange={(evento) =>
+              setFiltro(evento.target.value as FiltroAgenda)
+            }
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-emerald-500 sm:w-52"
+          >
+            <option value="hoje">Hoje</option>
+            <option value="amanha">Amanhã</option>
+            <option value="semana">Próximos 7 dias</option>
+            <option value="atrasadas">Atrasadas</option>
+            <option value="todas">Todas</option>
+          </select>
         </div>
-      )}
 
-      {carregando && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
-          Carregando agenda...
-        </div>
-      )}
+        {erro && (
+          <div className="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {erro}
+          </div>
+        )}
 
-      {!carregando && !erro && agendaPorData.length === 0 && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center shadow-sm">
-          <p className="text-lg font-bold text-emerald-800">
-            Nenhuma coleta encontrada
-          </p>
+        {carregando && (
+          <div className="px-5 py-16 text-center">
+            <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" />
+            <p className="mt-4 text-sm font-medium text-slate-500">
+              Carregando agenda...
+            </p>
+          </div>
+        )}
 
-          <p className="mt-2 text-sm text-emerald-700">
-            Não existem coletas correspondentes ao filtro selecionado.
-          </p>
-        </div>
-      )}
+        {!carregando && !erro && itensFiltrados.length === 0 && (
+          <div className="px-5 py-16 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              ✓
+            </div>
 
-      {!carregando &&
-        !erro &&
-        agendaPorData.map(([data, itens]) => {
-          const dataConvertida = criarDataLocal(data)!;
+            <p className="mt-4 font-bold text-slate-800">
+              Nenhuma coleta encontrada
+            </p>
 
-          return (
-            <article
-              key={data}
-              className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
-            >
-              <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
-                    Programação
-                  </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Não existem coletas correspondentes ao filtro selecionado.
+            </p>
+          </div>
+        )}
 
-                  <h3 className="mt-1 text-xl font-bold text-slate-900">
-                    {formatarData(data)}
-                  </h3>
-                </div>
+        {!carregando && !erro && itensFiltrados.length > 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1120px] text-left">
+                <thead className="border-b border-slate-200 bg-white">
+                  <tr>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Data prevista
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      OV
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Cliente / Unidade
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Localização
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Transportadora
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Situação
+                    </th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
 
-                <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700">
-                  {itens.length} {itens.length === 1 ? "coleta" : "coletas"}
-                </span>
-              </div>
+                <tbody className="divide-y divide-slate-100">
+                  {itensPaginados.map((item) => {
+                    const coleta = item.coleta;
+                    const situacao = situacaoItem(item);
 
-              <div className="grid gap-4 p-5 xl:grid-cols-2">
-                {itens.map((item) => {
-                  const visual = classeSituacao(item);
-                  const coleta = item.coleta;
+                    return (
+                      <tr
+                        key={coleta.id}
+                        className="transition hover:bg-slate-50/70"
+                      >
+                        <td className="whitespace-nowrap px-5 py-4">
+                          <p className="text-sm font-black text-slate-800">
+                            {formatarDataCurta(item.data)}
+                          </p>
 
-                  return (
-                    <div
-                      key={coleta.id}
-                      className={`relative overflow-hidden rounded-2xl border p-5 ${visual.card}`}
-                    >
-                      <div
-                        className={`absolute bottom-0 left-0 top-0 w-1.5 ${visual.faixa}`}
-                      />
+                          <p className="mt-1 text-[11px] font-medium text-slate-400">
+                            {formatarData(item.dataOriginal)}
+                          </p>
+                        </td>
 
-                      <div className="pl-3">
-                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                          <div>
+                        <td className="whitespace-nowrap px-5 py-4">
+                          <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-1.5 text-sm font-black text-emerald-700">
+                            {coleta.numero_ov || `#${coleta.id}`}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-bold text-slate-800">
+                            {coleta.cliente || "Cliente não informado"}
+                          </p>
+
+                          <p className="mt-1 max-w-[280px] text-xs leading-5 text-slate-500">
+                            {coleta.loja || "Unidade não informada"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-semibold text-slate-700">
+                            {[coleta.cidade, coleta.estado]
+                              .filter(Boolean)
+                              .join(" / ") || "Não informada"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="max-w-[210px] text-sm font-semibold leading-5 text-slate-700">
+                            {coleta.transportadora || "Não definida"}
+                          </p>
+                        </td>
+
+                        <td className="whitespace-nowrap px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold ${situacao.badge}`}
+                          >
                             <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${visual.selo}`}
-                            >
-                              {visual.titulo}
-                            </span>
+                              className={`h-1.5 w-1.5 rounded-full ${situacao.ponto}`}
+                            />
+                            {situacao.texto}
+                          </span>
+                        </td>
 
-                            <h4 className="mt-3 text-lg font-black text-slate-900">
-                              {coleta.numero_ov || `Coleta #${coleta.id}`}
-                            </h4>
-
-                            <p className="mt-1 text-sm font-semibold text-slate-700">
-                              {[coleta.cliente, coleta.loja]
-                                .filter(Boolean)
-                                .join(" • ") || "Cliente não informado"}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl bg-white/70 px-3 py-2 text-center">
-                            <p className="text-xs font-bold uppercase text-slate-500">
-                              Data
-                            </p>
-
-                            <p className="mt-1 text-lg font-black text-slate-900">
-                              {formatarDataCurta(dataConvertida)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border border-white/80 bg-white/60 p-3">
-                            <p className="text-xs font-bold uppercase text-slate-500">
-                              Transportadora
-                            </p>
-
-                            <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-                              {coleta.transportadora || "Não definida"}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl border border-white/80 bg-white/60 p-3">
-                            <p className="text-xs font-bold uppercase text-slate-500">
-                              Localização
-                            </p>
-
-                            <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-                              {[coleta.cidade, coleta.estado]
-                                .filter(Boolean)
-                                .join(" / ") || "Não informada"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {item.atrasada && (
-                          <p className="mt-4 rounded-xl bg-red-100 p-3 text-sm font-bold text-red-800">
-                            Atrasada há {Math.abs(item.diasDiferenca)}{" "}
-                            {Math.abs(item.diasDiferenca) === 1
-                              ? "dia"
-                              : "dias"}.
-                          </p>
-                        )}
-
-                        <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                          <p className="text-xs font-medium text-slate-500">
-                            Solicitação: {formatarData(coleta.data_solicitacao)}
-                          </p>
-
+                        <td className="whitespace-nowrap px-5 py-4">
                           <Link
                             href={`/coletas/${coleta.id}/editar`}
-                            className="rounded-xl bg-slate-900 px-4 py-2.5 text-center text-xs font-bold text-white transition hover:bg-slate-700"
+                            className="inline-flex rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
                           >
                             Abrir coleta
                           </Link>
-                        </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col justify-between gap-3 border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center">
+              <p className="text-xs text-slate-500">
+                Mostrando{" "}
+                <span className="font-bold text-slate-700">
+                  {inicioExibicao}
+                </span>{" "}
+                a{" "}
+                <span className="font-bold text-slate-700">
+                  {fimExibicao}
+                </span>{" "}
+                de{" "}
+                <span className="font-bold text-slate-700">
+                  {itensFiltrados.length}
+                </span>{" "}
+                coleta(s)
+              </p>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPagina((atual) => Math.max(1, atual - 1))
+                  }
+                  disabled={pagina === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ‹
+                </button>
+
+                {Array.from(
+                  { length: totalPaginas },
+                  (_, indice) => indice + 1,
+                )
+                  .filter(
+                    (numero) =>
+                      numero === 1 ||
+                      numero === totalPaginas ||
+                      Math.abs(numero - pagina) <= 1,
+                  )
+                  .map((numero, indice, lista) => {
+                    const anterior = lista[indice - 1];
+
+                    return (
+                      <div
+                        key={numero}
+                        className="flex items-center gap-1.5"
+                      >
+                        {anterior && numero - anterior > 1 && (
+                          <span className="px-1 text-xs text-slate-400">
+                            …
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setPagina(numero)}
+                          className={[
+                            "flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-bold transition",
+                            pagina === numero
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100",
+                          ].join(" ")}
+                        >
+                          {numero}
+                        </button>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPagina((atual) =>
+                      Math.min(totalPaginas, atual + 1),
+                    )
+                  }
+                  disabled={pagina === totalPaginas}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ›
+                </button>
               </div>
-            </article>
-          );
-        })}
+            </div>
+          </>
+        )}
+      </article>
     </section>
   );
 }
