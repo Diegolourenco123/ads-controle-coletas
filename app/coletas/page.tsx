@@ -20,6 +20,23 @@ type Coleta = {
   data_coleta: string | null;
   status: string | null;
   created_at: string | null;
+
+  // Etapa 2 — Financeiro / Transportadora
+  conhecimento: string | null;
+  valor_frete: number | null;
+  vencimento_transportadora: string | null;
+  status_pagamento_transportadora: string | null;
+  data_pagamento_transportadora: string | null;
+  situacao_pagamento_transportadora: string | null;
+
+  // Etapa 3 — Financeiro / ADS
+  numero_nf_cobranca_ads: string | null;
+  data_emissao_nf_cobranca_ads: string | null;
+  valor_nf_cobranca_ads: number | null;
+  vencimento_nf_cobranca_ads: string | null;
+  status_recebimento_ads: string | null;
+  data_recebimento_pagamento_ads: string | null;
+  situacao_recebimento: string | null;
 };
 
 function formatarData(data: string | null) {
@@ -86,6 +103,198 @@ function classeStatus(status: string | null) {
       "border-slate-200 bg-slate-50 text-slate-600",
     ponto: "bg-slate-400",
   };
+}
+
+
+type VisualStatus = {
+  badge: string;
+  ponto: string;
+};
+
+function dataVencida(data: string | null) {
+  if (!data) return false;
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const vencimento = new Date(`${data}T00:00:00`);
+  return vencimento.getTime() < hoje.getTime();
+}
+
+function statusCtePago(coleta: Coleta) {
+  if (coleta.data_pagamento_transportadora) {
+    return true;
+  }
+
+  const statusBanco = (
+    coleta.status_pagamento_transportadora ||
+    coleta.situacao_pagamento_transportadora ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    statusBanco.includes("pago") ||
+    statusBanco.includes("quitado")
+  );
+}
+
+function cteSeAplica(coleta: Coleta) {
+  const transportadora = (coleta.transportadora ?? "")
+    .trim()
+    .toLowerCase();
+
+  const conhecimento = (coleta.conhecimento ?? "")
+    .trim()
+    .toLowerCase();
+
+  // Coletas realizadas pela própria ADS não geram CT-e de
+  // transportadora terceirizada.
+  if (
+    transportadora.includes("ads logística") ||
+    transportadora === "ads" ||
+    conhecimento === "n/a" ||
+    conhecimento === "na" ||
+    conhecimento === "não se aplica" ||
+    conhecimento === "nao se aplica"
+  ) {
+    return false;
+  }
+
+  // Sem transportadora definida, não cobramos CT-e nesta etapa.
+  if (!transportadora) {
+    return false;
+  }
+
+  return true;
+}
+
+function statusCobrancaPaga(coleta: Coleta) {
+  if (coleta.data_recebimento_pagamento_ads) {
+    return true;
+  }
+
+  const statusBanco = (
+    coleta.status_recebimento_ads ||
+    coleta.situacao_recebimento ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    statusBanco.includes("pago") ||
+    statusBanco.includes("paga") ||
+    statusBanco.includes("recebido") ||
+    statusBanco.includes("recebida")
+  );
+}
+
+function obterStatusAtual(coleta: Coleta) {
+  const statusOperacional = (coleta.status ?? "").trim();
+
+  // Enquanto a operação física ainda não terminou,
+  // o status atual continua sendo o operacional.
+  if (
+    statusOperacional &&
+    statusOperacional !== "Recebido na ADS" &&
+    statusOperacional !== "Finalizado"
+  ) {
+    return statusOperacional;
+  }
+
+  // Depois da chegada à ADS, a prioridade passa para o CT-e.
+  if (cteSeAplica(coleta) && !statusCtePago(coleta)) {
+    if (
+      coleta.vencimento_transportadora &&
+      dataVencida(coleta.vencimento_transportadora)
+    ) {
+      return "CT-e vencido";
+    }
+
+    return "CT-e não pago";
+  }
+
+  // Depois do CT-e resolvido, verificamos a cobrança ao cliente.
+  const temNfCobranca =
+    Boolean(coleta.numero_nf_cobranca_ads) ||
+    Boolean(coleta.data_emissao_nf_cobranca_ads) ||
+    coleta.valor_nf_cobranca_ads !== null ||
+    Boolean(coleta.vencimento_nf_cobranca_ads);
+
+  if (!temNfCobranca) {
+    return "NF de cobrança não emitida";
+  }
+
+  if (!statusCobrancaPaga(coleta)) {
+    if (
+      coleta.vencimento_nf_cobranca_ads &&
+      dataVencida(coleta.vencimento_nf_cobranca_ads)
+    ) {
+      return "NF vencida";
+    }
+
+    return "Aguardando pagamento do cliente";
+  }
+
+  return "Finalizado";
+}
+
+function classeStatusAtual(status: string): VisualStatus {
+  if (
+    status === "Finalizado" ||
+    status === "Recebido na ADS"
+  ) {
+    return {
+      badge:
+        "border-emerald-200 bg-emerald-50 text-emerald-700",
+      ponto: "bg-emerald-500",
+    };
+  }
+
+  if (
+    status === "CT-e vencido" ||
+    status === "NF vencida"
+  ) {
+    return {
+      badge: "border-red-200 bg-red-50 text-red-700",
+      ponto: "bg-red-500",
+    };
+  }
+
+  if (
+    status === "CT-e não pago" ||
+    status === "NF de cobrança não emitida" ||
+    status === "Aguardando pagamento do cliente"
+  ) {
+    return {
+      badge:
+        "border-orange-200 bg-orange-50 text-orange-700",
+      ponto: "bg-orange-500",
+    };
+  }
+
+  return classeStatus(status);
+}
+
+function BadgeStatus({
+  texto,
+  visual,
+}: {
+  texto: string;
+  visual: VisualStatus;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold ${visual.badge}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${visual.ponto}`}
+      />
+      {texto}
+    </span>
+  );
 }
 
 function IconePesquisar() {
@@ -187,7 +396,7 @@ export default function TodasAsColetasPage() {
       const { data, error } = await supabase
         .from("coletas")
         .select(
-          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, numero_nf, transportadora, data_prevista_coleta, data_coleta, status, created_at",
+          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, numero_nf, transportadora, data_prevista_coleta, data_coleta, status, created_at, conhecimento, valor_frete, vencimento_transportadora, status_pagamento_transportadora, data_pagamento_transportadora, situacao_pagamento_transportadora, numero_nf_cobranca_ads, data_emissao_nf_cobranca_ads, valor_nf_cobranca_ads, vencimento_nf_cobranca_ads, status_recebimento_ads, data_recebimento_pagamento_ads, situacao_recebimento",
         )
         .order("created_at", {
           ascending: false,
@@ -330,13 +539,13 @@ export default function TodasAsColetasPage() {
   }
 
   const coletasFiltradas = useMemo(() => {
-    const termo =
-      pesquisa.trim().toLowerCase();
+    const termo = pesquisa.trim().toLowerCase();
 
     return coletas.filter((coleta) => {
+      const statusAtual = obterStatusAtual(coleta);
+
       const correspondeStatus =
-        !status ||
-        coleta.status === status;
+        !status || statusAtual === status;
 
       const conteudo = [
         coleta.numero_ov,
@@ -347,19 +556,18 @@ export default function TodasAsColetasPage() {
         coleta.numero_nf,
         coleta.transportadora,
         coleta.status,
+        coleta.conhecimento,
+        coleta.numero_nf_cobranca_ads,
+        statusAtual,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
       const correspondePesquisa =
-        !termo ||
-        conteudo.includes(termo);
+        !termo || conteudo.includes(termo);
 
-      return (
-        correspondeStatus &&
-        correspondePesquisa
-      );
+      return correspondeStatus && correspondePesquisa;
     });
   }, [coletas, pesquisa, status]);
 
@@ -404,7 +612,7 @@ export default function TodasAsColetasPage() {
 
           {/* RESUMO */}
           <div className="mb-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
               <p className="text-xs font-semibold text-slate-500">
                 Total de registros
               </p>
@@ -417,7 +625,7 @@ export default function TodasAsColetasPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-5 py-4 shadow-sm">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3 py-3 shadow-sm">
               <p className="text-xs font-semibold text-emerald-700">
                 Registros exibidos
               </p>
@@ -429,7 +637,7 @@ export default function TodasAsColetasPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-5 py-4 shadow-sm">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/70 px-3 py-3 shadow-sm">
               <p className="text-xs font-semibold text-blue-700">
                 Filtro atual
               </p>
@@ -448,7 +656,7 @@ export default function TodasAsColetasPage() {
 
             {/* FILTROS */}
             <div className="border-b border-slate-200 bg-white p-5">
-              <div className="grid gap-3 md:grid-cols-[1fr_260px]">
+              <div className="grid gap-3 md:grid-cols-[1fr_280px]">
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
                     <IconePesquisar />
@@ -458,9 +666,7 @@ export default function TodasAsColetasPage() {
                     type="search"
                     value={pesquisa}
                     onChange={(evento) =>
-                      setPesquisa(
-                        evento.target.value,
-                      )
+                      setPesquisa(evento.target.value)
                     }
                     placeholder="Pesquisar cliente, OV, NF, cidade, transportadora..."
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
@@ -470,39 +676,22 @@ export default function TodasAsColetasPage() {
                 <select
                   value={status}
                   onChange={(evento) =>
-                    setStatus(
-                      evento.target.value,
-                    )
+                    setStatus(evento.target.value)
                   }
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
                 >
-                  <option value="">
-                    Todos os status
-                  </option>
-
-                  <option value="Aguardando NF">
-                    Aguardando NF
-                  </option>
-
-                  <option value="Aguardando coleta">
-                    Aguardando coleta
-                  </option>
-
-                  <option value="Coleta realizada">
-                    Coleta realizada
-                  </option>
-
-                  <option value="Em transporte">
-                    Em transporte
-                  </option>
-
-                  <option value="Recebido na ADS">
-                    Recebido na ADS
-                  </option>
-
-                  <option value="Finalizado">
-                    Finalizado
-                  </option>
+                  <option value="">Todos os status</option>
+                  <option value="Aguardando NF">Aguardando NF</option>
+                  <option value="Aguardando coleta">Aguardando coleta</option>
+                  <option value="Coleta realizada">Coleta realizada</option>
+                  <option value="Em transporte">Em transporte</option>
+                  <option value="Recebido na ADS">Recebido na ADS</option>
+                  <option value="CT-e não pago">CT-e não pago</option>
+                  <option value="CT-e vencido">CT-e vencido</option>
+                  <option value="NF de cobrança não emitida">NF de cobrança não emitida</option>
+                  <option value="Aguardando pagamento do cliente">Aguardando pagamento do cliente</option>
+                  <option value="NF vencida">NF vencida</option>
+                  <option value="Finalizado">Finalizado</option>
                 </select>
               </div>
             </div>
@@ -513,39 +702,39 @@ export default function TodasAsColetasPage() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-left">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full min-w-[1120px] table-auto text-left">
                 <thead className="border-b border-slate-200 bg-slate-50/80">
                   <tr>
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="whitespace-nowrap px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Solicitação
                     </th>
 
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="whitespace-nowrap px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       OV
                     </th>
 
-                    <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Cliente / Unidade
                     </th>
 
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="whitespace-nowrap px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       NF
                     </th>
 
-                    <th className="px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Transportadora
                     </th>
 
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="whitespace-nowrap px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Coleta
                     </th>
 
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                      Status
+                    <th className="px-3 py-3 text-[10px] font-bold uppercase leading-4 tracking-wide text-slate-500">
+                      Status atual
                     </th>
 
-                    <th className="whitespace-nowrap px-5 py-4 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <th className="whitespace-nowrap px-3 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                       Ações
                     </th>
                   </tr>
@@ -598,30 +787,30 @@ export default function TodasAsColetasPage() {
                   {!carregando &&
                     coletasFiltradas.map(
                       (coleta) => {
-                        const visualStatus =
-                          classeStatus(
-                            coleta.status,
-                          );
+                        const statusAtual =
+                          obterStatusAtual(coleta);
+                        const visualStatusAtual =
+                          classeStatusAtual(statusAtual);
 
                         return (
                           <tr
                             key={coleta.id}
                             className="group transition-colors hover:bg-slate-50/80"
                           >
-                            <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
+                            <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-600">
                               {formatarData(
                                 coleta.data_solicitacao,
                               )}
                             </td>
 
-                            <td className="whitespace-nowrap px-5 py-4">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <div className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-1.5 text-sm font-black text-emerald-700">
                                 {coleta.numero_ov ||
                                   `#${coleta.id}`}
                               </div>
                             </td>
 
-                            <td className="px-5 py-4">
+                            <td className="max-w-[250px] px-3 py-3">
                               <p className="font-bold text-slate-800">
                                 {coleta.cliente ||
                                   "Cliente não informado"}
@@ -639,41 +828,35 @@ export default function TodasAsColetasPage() {
                               </p>
                             </td>
 
-                            <td className="whitespace-nowrap px-5 py-4 text-sm font-medium text-slate-700">
+                            <td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-slate-700">
                               {coleta.numero_nf ||
                                 "Aguardando"}
                             </td>
 
-                            <td className="px-5 py-4 text-sm font-medium text-slate-700">
+                            <td className="max-w-[180px] px-3 py-3 text-sm font-medium leading-5 text-slate-700">
                               {coleta.transportadora ||
                                 "Não definida"}
                             </td>
 
-                            <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
+                            <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-600">
                               {formatarData(
                                 coleta.data_coleta ||
                                   coleta.data_prevista_coleta,
                               )}
                             </td>
 
-                            <td className="whitespace-nowrap px-5 py-4">
-                              <span
-                                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${visualStatus.badge}`}
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${visualStatus.ponto}`}
-                                />
-
-                                {coleta.status ||
-                                  "Sem status"}
-                              </span>
+                            <td className="whitespace-nowrap px-3 py-3">
+                              <BadgeStatus
+                                texto={statusAtual}
+                                visual={visualStatusAtual}
+                              />
                             </td>
 
-                            <td className="whitespace-nowrap px-5 py-4">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <div className="flex items-center gap-2">
                                 <Link
                                   href={`/coletas/${coleta.id}`}
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
                                 >
                                   <IconeEditar />
                                   Editar
@@ -690,7 +873,7 @@ export default function TodasAsColetasPage() {
                                     excluindoId ===
                                     coleta.id
                                   }
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   <IconeExcluir />
 
@@ -709,7 +892,7 @@ export default function TodasAsColetasPage() {
               </table>
             </div>
 
-            <div className="flex flex-col justify-between gap-2 border-t border-slate-200 bg-slate-50/50 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-2 border-t border-slate-200 bg-slate-50/50 px-3 py-3 text-xs text-slate-500 sm:flex-row sm:items-center">
               <p>
                 <span className="font-bold text-slate-700">
                   {coletasFiltradas.length}

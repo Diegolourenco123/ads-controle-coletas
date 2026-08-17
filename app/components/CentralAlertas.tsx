@@ -464,7 +464,16 @@ function gerarAlertas(coletas: Coleta[]) {
     informativa: 4,
   };
 
-  return alertas.sort((a, b) => {
+  const ordemCategoria: Record<Alerta["categoria"], number> = {
+    "Financeiro ADS": 1,
+    Transportadora: 2,
+    Operação: 3,
+  };
+
+  // Ordena todos os alertas pela urgência.
+  // Em caso de mesma prioridade, prioriza a etapa mais avançada
+  // do fluxo: Financeiro ADS -> Transportadora -> Operação.
+  const alertasOrdenados = [...alertas].sort((a, b) => {
     const prioridade =
       ordemPrioridade[a.prioridade] -
       ordemPrioridade[b.prioridade];
@@ -473,10 +482,34 @@ function gerarAlertas(coletas: Coleta[]) {
       return prioridade;
     }
 
-    const dataA = criarDataLocal(a.dataReferencia)?.getTime() ?? 0;
-    const dataB = criarDataLocal(b.dataReferencia)?.getTime() ?? 0;
+    const categoria =
+      ordemCategoria[a.categoria] -
+      ordemCategoria[b.categoria];
+
+    if (categoria !== 0) {
+      return categoria;
+    }
+
+    const dataA =
+      criarDataLocal(a.dataReferencia)?.getTime() ?? 0;
+    const dataB =
+      criarDataLocal(b.dataReferencia)?.getTime() ?? 0;
 
     return dataA - dataB;
+  });
+
+  // Cada coleta aparece apenas uma vez na Central de Alertas.
+  // Como a lista já está ordenada, mantemos somente o alerta
+  // mais importante de cada coleta.
+  const coletasJaIncluidas = new Set<number>();
+
+  return alertasOrdenados.filter((alerta) => {
+    if (coletasJaIncluidas.has(alerta.coletaId)) {
+      return false;
+    }
+
+    coletasJaIncluidas.add(alerta.coletaId);
+    return true;
   });
 }
 
