@@ -39,7 +39,7 @@ type Indicadores = {
 
   financeiroAds: {
     emitidas: number;
-    aguardandoRecebimento: number;
+    aguardandoPagamento: number;
     pagas: number;
     vencidas: number;
   };
@@ -62,7 +62,7 @@ const inicial: Indicadores = {
 
   financeiroAds: {
     emitidas: 0,
-    aguardandoRecebimento: 0,
+    aguardandoPagamento: 0,
     pagas: 0,
     vencidas: 0,
   },
@@ -277,7 +277,7 @@ export default function DashboardCards() {
               statusAds !== "cancelada"
             ) {
               acumulador.financeiroAds
-                .aguardandoRecebimento += 1;
+                .aguardandoPagamento += 1;
             }
 
             return acumulador;
@@ -442,11 +442,11 @@ export default function DashboardCards() {
     },
 
     {
-      titulo: "Aguardando recebimento",
+      titulo: "Aguardando pagamento",
       filtro: "nf-ads-aguardando",
       valor:
         indicadores.financeiroAds
-          .aguardandoRecebimento,
+          .aguardandoPagamento,
       detalhe: "Pagamentos pendentes",
 
       borda: "border-orange-200",

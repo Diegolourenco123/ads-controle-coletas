@@ -434,99 +434,167 @@ export default function DashboardExecutivo() {
         </div>
       )}
 
-      {/* CENTRO DE INTELIGÊNCIA */}
-      <article className="relative overflow-hidden rounded-[28px] border border-slate-800/90 bg-slate-950 text-white shadow-xl shadow-slate-950/10">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
-        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="absolute -left-20 bottom-0 h-44 w-44 rounded-full bg-blue-500/10 blur-3xl" />
+      {/* CENTRO DE INTELIGÊNCIA — VISUAL PREMIUM */}
+      <article className="relative overflow-hidden rounded-[30px] border border-slate-800/90 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.10),transparent_30%),linear-gradient(135deg,#020617_0%,#071426_55%,#08111f_100%)] text-white shadow-[0_28px_70px_-38px_rgba(2,6,23,0.9)]">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/80 to-transparent" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-0 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
 
-        <div className="relative grid gap-8 p-6 lg:grid-cols-[1.2fr_1fr] lg:p-8">
+        <div className="relative grid gap-7 p-6 lg:grid-cols-[1.05fr_1fr] lg:p-8">
+          {/* LADO ESQUERDO */}
           <div className="flex flex-col justify-between">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3.5 py-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-30" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
 
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.23em] text-emerald-300">
                   Centro de Inteligência Operacional
                 </p>
               </div>
 
-              <h3 className="max-w-2xl text-2xl font-black tracking-tight md:text-[30px]">
-                Central de Controle Operacional
+              <h3 className="mt-5 max-w-xl text-[30px] font-black leading-[1.05] tracking-[-0.035em] text-white md:text-[38px]">
+                Central de Controle
+                <span className="block text-white">Operacional</span>
               </h3>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                Acompanhe em tempo real o andamento das coletas,
-                faturamentos, pagamentos e recebimentos da operação.
+              <div className="mt-4 h-1 w-14 rounded-full bg-emerald-400" />
+
+              <p className="mt-5 max-w-xl text-sm leading-6 text-slate-300">
+                Acompanhe em tempo real o andamento das coletas, faturamentos,
+                pagamentos, documentos e recebimentos da operação.
               </p>
 
-              <div className="mt-4 flex max-w-2xl items-start gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-3">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+              <div
+                className={[
+                  "mt-6 flex max-w-xl items-center justify-between gap-4 rounded-2xl border px-4 py-4 transition",
+                  resumo.atrasadas > 0
+                    ? "border-red-500/30 bg-red-500/10"
+                    : "border-emerald-500/20 bg-emerald-500/10",
+                ].join(" ")}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className={[
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+                      resumo.atrasadas > 0
+                        ? "border-red-400/20 bg-red-500/15 text-red-300"
+                        : "border-emerald-400/20 bg-emerald-500/15 text-emerald-300",
+                    ].join(" ")}
+                  >
+                    {resumo.atrasadas > 0 ? (
+                      <IconeAlertaPainel className="h-5 w-5" />
+                    ) : (
+                      <IconeCheckPainel className="h-5 w-5" />
+                    )}
+                  </div>
 
-                <p className="text-xs leading-5 text-slate-400">
-                  {carregando
-                    ? "Analisando os dados operacionais e financeiros..."
-                    : mensagemExecutiva}
-                </p>
+                  <p
+                    className={[
+                      "text-sm font-semibold leading-5",
+                      resumo.atrasadas > 0 ? "text-red-100" : "text-emerald-100",
+                    ].join(" ")}
+                  >
+                    {carregando
+                      ? "Analisando os dados operacionais e financeiros..."
+                      : mensagemExecutiva}
+                  </p>
+                </div>
+
+                <Link
+                  href="/alertas"
+                  aria-label="Abrir Central de Alertas"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <IconeSetaPainel className="h-4 w-4" />
+                </Link>
               </div>
-            </div>
-
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href="/alertas"
-                className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-400 hover:shadow-md"
-              >
-                Central de Alertas
-              </Link>
-
-              <Link
-                href="/coletas"
-                className="rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:-translate-y-0.5 hover:border-slate-600 hover:bg-slate-800"
-              >
-                Todas as coletas
-              </Link>
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* LADO DIREITO */}
+          <div className="grid gap-4 sm:grid-cols-2">
             <ResumoEscuro
               titulo="Fretes pendentes"
-              valor={formatarMoeda(
-                resumo.valorFretesPendentes,
-              )}
+              valor={formatarMoeda(resumo.valorFretesPendentes)}
               carregando={carregando}
-              classe="text-orange-300"
-              marcador="bg-orange-400"
+              classe="text-emerald-300"
+              marcador="bg-emerald-400"
+              detalhe={`${resumo.valorFretesPendentes > 0 ? "Cobranças em aberto" : "Nenhum valor pendente"}`}
+              variante="emerald"
+              icone="caminhao"
             />
 
             <ResumoEscuro
               titulo="A receber pela ADS"
-              valor={formatarMoeda(
-                resumo.valorAdsPendente,
-              )}
+              valor={formatarMoeda(resumo.valorAdsPendente)}
               carregando={carregando}
               classe="text-orange-300"
               marcador="bg-orange-400"
+              detalhe={`${resumo.nfsAdsPendentes} ${resumo.nfsAdsPendentes === 1 ? "título em aberto" : "títulos em aberto"}`}
+              variante="orange"
+              icone="dinheiro"
             />
 
             <ResumoEscuro
               titulo="Recebidas hoje"
-              valor={String(
-                resumo.recebidasHoje,
-              ).padStart(2, "0")}
+              valor={String(resumo.recebidasHoje).padStart(2, "0")}
               carregando={carregando}
               classe="text-emerald-300"
               marcador="bg-emerald-400"
+              detalhe="Concluídas hoje"
+              variante="emerald"
+              icone="caixa"
             />
 
             <ResumoEscuro
               titulo="Previstas hoje"
-              valor={String(
-                resumo.previstasHoje,
-              ).padStart(2, "0")}
+              valor={String(resumo.previstasHoje).padStart(2, "0")}
               carregando={carregando}
               classe="text-blue-300"
               marcador="bg-blue-400"
+              detalhe="Programadas para hoje"
+              variante="blue"
+              icone="calendario"
+            />
+          </div>
+        </div>
+
+        {/* ATALHOS INFERIORES */}
+        <div className="relative border-t border-slate-800/80 bg-slate-950/35 px-6 py-4 lg:px-8">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <AtalhoExecutivo
+              href="/alertas"
+              titulo="Central de Alertas"
+              descricao="Ver alertas e pendências"
+              variante="emerald"
+              icone="alerta"
+            />
+
+            <AtalhoExecutivo
+              href="/coletas"
+              titulo="Todas as coletas"
+              descricao="Consultar e gerenciar"
+              variante="blue"
+              icone="lista"
+            />
+
+            <AtalhoExecutivo
+              href="/documentos"
+              titulo="Central de Documentos"
+              descricao="NF, CT-e e cobranças"
+              variante="violet"
+              icone="documento"
+            />
+
+            <AtalhoExecutivo
+              href="/relatorios"
+              titulo="Relatórios"
+              descricao="Análises e indicadores"
+              variante="orange"
+              icone="grafico"
             />
           </div>
         </div>
@@ -732,45 +800,368 @@ export default function DashboardExecutivo() {
    COMPONENTES VISUAIS
 ========================================================= */
 
+type IconePainelProps = {
+  className?: string;
+};
+
+function IconeCaminhaoPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 6h11v10H3z" />
+      <path d="M14 9h4l3 3v4h-7z" />
+      <circle cx="7" cy="18" r="2" />
+      <circle cx="18" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function IconeDinheiroPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15 8.5c-.8-.9-2-1.4-3.2-1.4-1.8 0-3.1.9-3.1 2.3 0 1.3 1 2 3.3 2.5 2.2.5 3.3 1.2 3.3 2.6 0 1.5-1.4 2.5-3.4 2.5-1.5 0-2.8-.6-3.8-1.6" />
+      <path d="M12 5.8v12.4" />
+    </svg>
+  );
+}
+
+function IconeCaixaPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m21 8-9 5-9-5" />
+      <path d="M3 8l9-5 9 5v8l-9 5-9-5Z" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
+function IconeCalendarioPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4" />
+      <path d="M8 3v4" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+function IconeAlertaPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M10.3 4.3 2.7 17.5A2 2 0 0 0 4.4 20h15.2a2 2 0 0 0 1.7-2.5L13.7 4.3a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+function IconeCheckPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.2 2.2 4.8-5" />
+    </svg>
+  );
+}
+
+function IconeSetaPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function IconeListaPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M9 6h11" />
+      <path d="M9 12h11" />
+      <path d="M9 18h11" />
+      <path d="M4 6h.01" />
+      <path d="M4 12h.01" />
+      <path d="M4 18h.01" />
+    </svg>
+  );
+}
+
+function IconeDocumentoPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h8" />
+    </svg>
+  );
+}
+
+function IconeGraficoPainel({ className }: IconePainelProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M4 19V9" />
+      <path d="M10 19V5" />
+      <path d="M16 19v-7" />
+      <path d="M22 19H2" />
+    </svg>
+  );
+}
+
 function ResumoEscuro({
   titulo,
   valor,
   carregando,
   classe,
   marcador,
+  detalhe,
+  variante,
+  icone,
 }: {
   titulo: string;
   valor: string;
   carregando: boolean;
   classe: string;
   marcador: string;
+  detalhe: string;
+  variante: "emerald" | "orange" | "blue";
+  icone: "caminhao" | "dinheiro" | "caixa" | "calendario";
 }) {
+  const configuracao =
+    variante === "orange"
+      ? {
+          caixa:
+            "border-orange-500/25 bg-[linear-gradient(145deg,rgba(249,115,22,0.10),rgba(15,23,42,0.72))]",
+          icone:
+            "border-orange-400/20 bg-orange-500/15 text-orange-300",
+          pill:
+            "border-orange-400/10 bg-orange-500/10 text-orange-200",
+        }
+      : variante === "blue"
+        ? {
+            caixa:
+              "border-blue-500/25 bg-[linear-gradient(145deg,rgba(59,130,246,0.10),rgba(15,23,42,0.72))]",
+            icone:
+              "border-blue-400/20 bg-blue-500/15 text-blue-300",
+            pill:
+              "border-blue-400/10 bg-blue-500/10 text-blue-200",
+          }
+        : {
+            caixa:
+              "border-emerald-500/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.10),rgba(15,23,42,0.72))]",
+            icone:
+              "border-emerald-400/20 bg-emerald-500/15 text-emerald-300",
+            pill:
+              "border-emerald-400/10 bg-emerald-500/10 text-emerald-200",
+          };
+
+  const Icone =
+    icone === "dinheiro"
+      ? IconeDinheiroPainel
+      : icone === "caixa"
+        ? IconeCaixaPainel
+        : icone === "calendario"
+          ? IconeCalendarioPainel
+          : IconeCaminhaoPainel;
+
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-900">
-      <div className="absolute inset-x-4 top-0 h-px bg-slate-700/70" />
-
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full ${marcador}`}
-          />
-
-          <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-            {titulo}
-          </p>
+    <div
+      className={`group relative overflow-hidden rounded-[22px] border p-5 shadow-[0_18px_38px_-28px_rgba(0,0,0,0.85)] transition duration-200 hover:-translate-y-0.5 ${configuracao.caixa}`}
+    >
+      <div className="flex items-start gap-4">
+        <div
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${configuracao.icone}`}
+        >
+          <Icone className="h-6 w-6" />
         </div>
 
-        <span className="text-[10px] font-semibold text-slate-600">
-          •
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${marcador}`} />
+              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                {titulo}
+              </p>
+            </div>
+
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-white/10 text-[10px] font-bold text-slate-500">
+              i
+            </span>
+          </div>
+
+          <p className={`mt-3 text-[24px] font-black leading-none tracking-[-0.03em] ${classe}`}>
+            {carregando ? "..." : valor}
+          </p>
+
+          <div
+            className={`mt-4 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold ${configuracao.pill}`}
+          >
+            {carregando ? "Atualizando..." : detalhe}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AtalhoExecutivo({
+  href,
+  titulo,
+  descricao,
+  variante,
+  icone,
+}: {
+  href: string;
+  titulo: string;
+  descricao: string;
+  variante: "emerald" | "blue" | "violet" | "orange";
+  icone: "alerta" | "lista" | "documento" | "grafico";
+}) {
+  const configuracao =
+    variante === "blue"
+      ? {
+          caixa: "hover:border-blue-500/35 hover:bg-blue-500/[0.05]",
+          icone: "bg-blue-500/15 text-blue-300",
+          titulo: "text-blue-300",
+        }
+      : variante === "violet"
+        ? {
+            caixa: "hover:border-violet-500/35 hover:bg-violet-500/[0.05]",
+            icone: "bg-violet-500/15 text-violet-300",
+            titulo: "text-violet-300",
+          }
+        : variante === "orange"
+          ? {
+              caixa: "hover:border-orange-500/35 hover:bg-orange-500/[0.05]",
+              icone: "bg-orange-500/15 text-orange-300",
+              titulo: "text-orange-300",
+            }
+          : {
+              caixa: "hover:border-emerald-500/35 hover:bg-emerald-500/[0.05]",
+              icone: "bg-emerald-500/15 text-emerald-300",
+              titulo: "text-emerald-300",
+            };
+
+  const Icone =
+    icone === "lista"
+      ? IconeListaPainel
+      : icone === "documento"
+        ? IconeDocumentoPainel
+        : icone === "grafico"
+          ? IconeGraficoPainel
+          : IconeAlertaPainel;
+
+  return (
+    <Link
+      href={href}
+      className={`group flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/55 p-3.5 transition ${configuracao.caixa}`}
+    >
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${configuracao.icone}`}
+      >
+        <Icone className="h-5 w-5" />
       </div>
 
-      <p
-        className={`mt-3 text-xl font-black tracking-tight ${classe}`}
-      >
-        {carregando ? "..." : valor}
-      </p>
-    </div>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-sm font-bold ${configuracao.titulo}`}>
+          {titulo}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-400">
+          {descricao}
+        </p>
+      </div>
+
+      <IconeSetaPainel className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300" />
+    </Link>
   );
 }
 

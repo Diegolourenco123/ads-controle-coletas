@@ -46,6 +46,10 @@ type Coleta = {
   data_nf: string | null;
   numero_nf: string | null;
 
+  arquivo_nf_cliente: string | null;
+  arquivo_cte: string | null;
+  arquivo_nf_cobranca_ads: string | null;
+
   transportadora: string | null;
   data_envio_transportadora: string | null;
   data_prevista_coleta: string | null;
@@ -83,6 +87,22 @@ const campo =
 
 const rotulo = "text-sm font-semibold text-slate-700";
 
+const campoArquivo =
+  "mt-2 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200";
+
+const BUCKET_DOCUMENTOS = "documentos-coletas";
+const LIMITE_ARQUIVO = 10 * 1024 * 1024;
+
+const tiposArquivoPermitidos = [
+  "application/pdf",
+  "application/xml",
+  "text/xml",
+  "image/jpeg",
+  "image/png",
+];
+
+const extensoesPermitidas = [".pdf", ".xml", ".jpg", ".jpeg", ".png"];
+
 const estados = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
   "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
@@ -114,6 +134,37 @@ function normalizarTexto(texto: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+}
+
+function nomeArquivoSeguro(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+}
+
+function extensaoPermitida(nome: string) {
+  const nomeNormalizado = nome.toLowerCase();
+  return extensoesPermitidas.some((extensao) =>
+    nomeNormalizado.endsWith(extensao),
+  );
+}
+
+function validarArquivo(arquivo: File) {
+  if (arquivo.size > LIMITE_ARQUIVO) {
+    throw new Error(`O arquivo "${arquivo.name}" ultrapassa o limite de 10 MB.`);
+  }
+
+  const tipoValido =
+    !arquivo.type ||
+    tiposArquivoPermitidos.includes(arquivo.type) ||
+    extensaoPermitida(arquivo.name);
+
+  if (!tipoValido) {
+    throw new Error(`O arquivo "${arquivo.name}" possui um formato não permitido.`);
+  }
 }
 
 function calcularStatusOperacional(dados: FormData) {
@@ -332,6 +383,45 @@ function criarEventosHistorico(
   return eventos;
 }
 
+
+function formatarDataExecutiva(data: string | null) {
+  if (!data) return "—";
+
+  const valor = data.includes("T") ? data.split("T")[0] : data;
+  const [ano, mes, dia] = valor.split("-");
+
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
+}
+
+function formatarMoedaExecutiva(valor: number | null) {
+  if (valor === null || valor === undefined) return "—";
+
+  return valor.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function statusExecutivoFinanceiro(coleta: Coleta) {
+  const statusAds = normalizarTexto(coleta.status_recebimento_ads ?? "");
+
+  if (
+    statusAds === "paga" ||
+    Boolean(coleta.data_recebimento_pagamento_ads)
+  ) {
+    return "Finalizado";
+  }
+
+  if (
+    coleta.numero_nf_cobranca_ads ||
+    coleta.data_emissao_nf_cobranca_ads
+  ) {
+    return "Aguardando pagamento";
+  }
+
+  return coleta.status || "Sem status";
+}
+
 export default function FormEditarColeta({ id }: { id: number }) {
   const formularioRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -351,6 +441,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
   const [excluindo, setExcluindo] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [atualizarHistorico, setAtualizarHistorico] = useState(0);
+  const [abrindoDocumento, setAbrindoDocumento] = useState<string | null>(null);
   const [tipoMensagem, setTipoMensagem] = useState<
     "sucesso" | "erro" | "carregando"
   >("sucesso");
@@ -513,6 +604,71 @@ export default function FormEditarColeta({ id }: { id: number }) {
     carregarColeta();
   }, [id]);
 
+  async function enviarDocumento(arquivo: File, categoria: string) {
+    validarArquivo(arquivo);
+
+    const {
+      data: { session },
+      error: erroSessao,
+    } = await supabase.auth.getSession();
+
+    if (erroSessao) {
+      throw new Error(
+        `Não foi possível verificar a sessão: ${erroSessao.message}`,
+      );
+    }
+
+    if (!session) {
+      throw new Error(
+        "Sessão do Supabase não encontrada. Entre novamente e tente anexar o documento.",
+      );
+    }
+
+    const caminho = `coleta-${id}/${categoria}-${Date.now()}-${nomeArquivoSeguro(
+      arquivo.name,
+    )}`;
+
+    const { error } = await supabase.storage
+      .from(BUCKET_DOCUMENTOS)
+      .upload(caminho, arquivo, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: arquivo.type || undefined,
+      });
+
+    if (error) {
+      throw new Error(`Falha ao enviar ${arquivo.name}: ${error.message}`);
+    }
+
+    return caminho;
+  }
+
+  async function abrirDocumentoAtual(
+    caminho: string | null,
+    identificador: string,
+  ) {
+    if (!caminho) return;
+
+    setAbrindoDocumento(identificador);
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET_DOCUMENTOS)
+      .createSignedUrl(caminho, 60 * 10);
+
+    if (error || !data?.signedUrl) {
+      console.error("Erro ao abrir documento:", error);
+      setTipoMensagem("erro");
+      setMensagem(
+        "Não foi possível abrir o documento atual. Verifique as permissões do Storage.",
+      );
+      setAbrindoDocumento(null);
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    setAbrindoDocumento(null);
+  }
+
   async function salvarAlteracoes(
     evento: FormEvent<HTMLFormElement>,
   ) {
@@ -555,6 +711,64 @@ export default function FormEditarColeta({ id }: { id: number }) {
     const dataEfetivaColeta = valorOuNulo("dataEfetivaColeta");
     const statusAutomatico = calcularStatusOperacional(dados);
 
+    const obterArquivo = (nome: string) => {
+      const valor = dados.get(nome);
+      return valor instanceof File && valor.size > 0 ? valor : null;
+    };
+
+    const arquivoNfCliente = obterArquivo("arquivoNfCliente");
+    const arquivoCte = obterArquivo("arquivoCte");
+    const arquivoNfCobrancaAds = obterArquivo("arquivoNfCobrancaAds");
+
+    const caminhosNovos: string[] = [];
+
+    let caminhoNfCliente = coleta?.arquivo_nf_cliente ?? null;
+    let caminhoCte = coleta?.arquivo_cte ?? null;
+    let caminhoNfCobrancaAds = coleta?.arquivo_nf_cobranca_ads ?? null;
+
+    const caminhoNfClienteAnterior = caminhoNfCliente;
+    const caminhoCteAnterior = caminhoCte;
+    const caminhoNfCobrancaAdsAnterior = caminhoNfCobrancaAds;
+
+    try {
+      if (arquivoNfCliente || arquivoCte || arquivoNfCobrancaAds) {
+        setMensagem("Enviando documentos e salvando alterações...");
+      }
+
+      if (arquivoNfCliente) {
+        caminhoNfCliente = await enviarDocumento(arquivoNfCliente, "nf-cliente");
+        caminhosNovos.push(caminhoNfCliente);
+      }
+
+      if (arquivoCte) {
+        caminhoCte = await enviarDocumento(arquivoCte, "cte");
+        caminhosNovos.push(caminhoCte);
+      }
+
+      if (arquivoNfCobrancaAds) {
+        caminhoNfCobrancaAds = await enviarDocumento(
+          arquivoNfCobrancaAds,
+          "nf-cobranca-ads",
+        );
+        caminhosNovos.push(caminhoNfCobrancaAds);
+      }
+    } catch (erroUpload) {
+      if (caminhosNovos.length > 0) {
+        await supabase.storage
+          .from(BUCKET_DOCUMENTOS)
+          .remove(caminhosNovos);
+      }
+
+      setTipoMensagem("erro");
+      setMensagem(
+        erroUpload instanceof Error
+          ? erroUpload.message
+          : "Não foi possível enviar os documentos.",
+      );
+      setSalvando(false);
+      return;
+    }
+
     const atualizacao = {
       data_solicitacao: valorOuNulo("dataSolicitacao"),
       cliente: valorOuNulo("cliente"),
@@ -569,6 +783,10 @@ export default function FormEditarColeta({ id }: { id: number }) {
 
       data_nf: valorOuNulo("dataNotaFiscal"),
       numero_nf: valorOuNulo("numeroNotaFiscal"),
+
+      arquivo_nf_cliente: caminhoNfCliente,
+      arquivo_cte: caminhoCte,
+      arquivo_nf_cobranca_ads: caminhoNfCobrancaAds,
 
       transportadora: valorOuNulo("transportadora"),
       data_envio_transportadora: valorOuNulo("dataEnvioTransportadora"),
@@ -634,6 +852,12 @@ export default function FormEditarColeta({ id }: { id: number }) {
         error,
       );
 
+      if (caminhosNovos.length > 0) {
+        await supabase.storage
+          .from(BUCKET_DOCUMENTOS)
+          .remove(caminhosNovos);
+      }
+
       setTipoMensagem("erro");
       setMensagem(
         error
@@ -676,9 +900,41 @@ export default function FormEditarColeta({ id }: { id: number }) {
       }
     }
 
+    const caminhosAntigosSubstituidos = [
+      arquivoNfCliente &&
+      caminhoNfClienteAnterior &&
+      caminhoNfClienteAnterior !== caminhoNfCliente
+        ? caminhoNfClienteAnterior
+        : null,
+      arquivoCte &&
+      caminhoCteAnterior &&
+      caminhoCteAnterior !== caminhoCte
+        ? caminhoCteAnterior
+        : null,
+      arquivoNfCobrancaAds &&
+      caminhoNfCobrancaAdsAnterior &&
+      caminhoNfCobrancaAdsAnterior !== caminhoNfCobrancaAds
+        ? caminhoNfCobrancaAdsAnterior
+        : null,
+    ].filter((caminho): caminho is string => Boolean(caminho));
+
+    if (caminhosAntigosSubstituidos.length > 0) {
+      const { error: erroRemocao } = await supabase.storage
+        .from(BUCKET_DOCUMENTOS)
+        .remove(caminhosAntigosSubstituidos);
+
+      if (erroRemocao) {
+        console.warn(
+          "A coleta foi atualizada, mas não foi possível remover um arquivo antigo:",
+          erroRemocao,
+        );
+      }
+    }
+
     // Usa exatamente o registro devolvido pelo Supabase.
     // Assim a tela só mostra sucesso se o banco realmente foi atualizado.
     setColeta(coletaAtualizada as Coleta);
+    setAtualizarHistorico((valor) => valor + 1);
 
     setTipoMensagem("sucesso");
     setMensagem(
@@ -806,6 +1062,382 @@ export default function FormEditarColeta({ id }: { id: number }) {
         </div>
       )}
 
+      {/* CABEÇALHO EXECUTIVO DA COLETA — VISUAL REFINADO */}
+      <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_50px_-30px_rgba(15,23,42,0.35)]">
+        <div className="relative overflow-hidden bg-slate-950 px-6 py-6 text-white md:px-7">
+          <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-blue-500/10 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Visão executiva
+                </span>
+
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  Coleta #{coleta.id}
+                </span>
+              </div>
+
+              <h2 className="mt-4 text-[30px] font-black leading-none tracking-[-0.035em] text-white md:text-[36px]">
+                {coleta.numero_ov
+                  ? `OV ${coleta.numero_ov}`
+                  : `Coleta #${coleta.id}`}
+              </h2>
+
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-slate-300">
+                <span className="font-bold text-slate-100">
+                  {coleta.cliente || "Cliente não informado"}
+                </span>
+                {coleta.loja && (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <span>{coleta.loja}</span>
+                  </>
+                )}
+                {(coleta.cidade || coleta.estado) && (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <span>
+                      {[coleta.cidade, coleta.estado]
+                        .filter(Boolean)
+                        .join("/")}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur">
+              <p className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
+                Status atual
+              </p>
+
+              <div className="mt-2 flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-30" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                </span>
+
+                <span className="text-sm font-extrabold tracking-[-0.01em] text-emerald-300">
+                  {statusExecutivoFinanceiro(coleta)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-6 md:px-7">
+          {(() => {
+            const etapas = [
+              {
+                titulo: "Solicitada",
+                concluida: Boolean(coleta.data_solicitacao),
+              },
+              {
+                titulo: "NF recebida",
+                concluida: Boolean(coleta.data_nf && coleta.numero_nf),
+              },
+              {
+                titulo: "Transportadora",
+                concluida: Boolean(
+                  coleta.transportadora &&
+                    coleta.data_envio_transportadora,
+                ),
+              },
+              {
+                titulo: "Coletada",
+                concluida: Boolean(
+                  coleta.data_efetiva_coleta ?? coleta.data_coleta,
+                ),
+              },
+              {
+                titulo: "Recebida ADS",
+                concluida: Boolean(coleta.data_chegada_ads),
+              },
+              {
+                titulo: "Cobrança",
+                concluida: Boolean(
+                  coleta.numero_nf_cobranca_ads ||
+                    coleta.data_emissao_nf_cobranca_ads,
+                ),
+              },
+              {
+                titulo: "Paga",
+                concluida:
+                  normalizarTexto(
+                    coleta.status_recebimento_ads ?? "",
+                  ) === "paga" ||
+                  Boolean(coleta.data_recebimento_pagamento_ads),
+              },
+            ];
+
+            const quantidadeConcluida =
+              etapas.filter((etapa) => etapa.concluida).length;
+
+            const percentual = Math.round(
+              (quantidadeConcluida / etapas.length) * 100,
+            );
+
+            return (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
+                      Progresso operacional
+                    </p>
+                    <p className="mt-1 text-[13px] font-semibold text-slate-700">
+                      Jornada da solicitação ao encerramento financeiro.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">
+                      {quantidadeConcluida} de {etapas.length} etapas
+                    </span>
+                    <span className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-white">
+                      {percentual}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="relative mt-5">
+                  <div className="absolute left-5 right-5 top-5 hidden h-px bg-slate-200 lg:block" />
+
+                  <div className="relative grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+                    {etapas.map((etapa, indice) => {
+                      const atual =
+                        !etapa.concluida &&
+                        indice === quantidadeConcluida;
+
+                      return (
+                        <div
+                          key={etapa.titulo}
+                          className={[
+                            "relative flex min-h-[72px] items-center gap-3 rounded-xl border px-3 py-3 lg:flex-col lg:justify-center lg:gap-2 lg:text-center",
+                            etapa.concluida
+                              ? "border-emerald-200 bg-white"
+                              : atual
+                                ? "border-blue-200 bg-white shadow-sm"
+                                : "border-slate-200 bg-white/70",
+                          ].join(" ")}
+                        >
+                          <span
+                            className={[
+                              "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-4 border-white text-[11px] font-black shadow-sm",
+                              etapa.concluida
+                                ? "bg-emerald-600 text-white"
+                                : atual
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-200 text-slate-500",
+                            ].join(" ")}
+                          >
+                            {etapa.concluida ? "✓" : indice + 1}
+                          </span>
+
+                          <div>
+                            <p
+                              className={[
+                                "text-[11px] font-extrabold leading-4",
+                                etapa.concluida
+                                  ? "text-emerald-800"
+                                  : atual
+                                    ? "text-blue-800"
+                                    : "text-slate-500",
+                              ].join(" ")}
+                            >
+                              {etapa.titulo}
+                            </p>
+
+                            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                              {etapa.concluida
+                                ? "Concluída"
+                                : atual
+                                  ? "Etapa atual"
+                                  : "Pendente"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+            {[
+              {
+                titulo: "Solicitação",
+                valor: formatarDataExecutiva(
+                  coleta.data_solicitacao,
+                ),
+                sigla: "SO",
+              },
+              {
+                titulo: "Transportadora",
+                valor:
+                  coleta.transportadora ||
+                  "Não definida",
+                sigla: "TR",
+              },
+              {
+                titulo: "Prevista",
+                valor: formatarDataExecutiva(
+                  coleta.data_prevista_coleta,
+                ),
+                sigla: "PR",
+              },
+              {
+                titulo: "Realizada",
+                valor: formatarDataExecutiva(
+                  coleta.data_efetiva_coleta ??
+                    coleta.data_coleta,
+                ),
+                sigla: "CR",
+              },
+              {
+                titulo: "CT-e",
+                valor:
+                  coleta.conhecimento ||
+                  "Não informado",
+                sigla: "CT",
+              },
+              {
+                titulo: "Chegada ADS",
+                valor: formatarDataExecutiva(
+                  coleta.data_chegada_ads,
+                ),
+                sigla: "AD",
+              },
+              {
+                titulo: "Frete",
+                valor: formatarMoedaExecutiva(
+                  coleta.valor_frete,
+                ),
+                sigla: "R$",
+              },
+              {
+                titulo: "Cobrança ADS",
+                valor:
+                  coleta.numero_nf_cobranca_ads
+                    ? `NF ${coleta.numero_nf_cobranca_ads}`
+                    : "Não emitida",
+                sigla: "NF",
+              },
+            ].map((item) => (
+              <div
+                key={item.titulo}
+                className="group rounded-2xl border border-slate-200 bg-white p-3.5 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.45)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                      {item.titulo}
+                    </p>
+                    <p
+                      className="mt-2 truncate text-[12px] font-extrabold tracking-[-0.01em] text-slate-800"
+                      title={String(item.valor)}
+                    >
+                      {item.valor}
+                    </p>
+                  </div>
+
+                  <span className="flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 px-1.5 text-[9px] font-black text-slate-500 transition group-hover:bg-slate-900 group-hover:text-white">
+                    {item.sigla}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50 to-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-blue-500">
+                    Financeiro Transportadora
+                  </p>
+                  <p className="mt-2 text-[15px] font-black tracking-[-0.02em] text-blue-950">
+                    {coleta.status_pagamento_transportadora ||
+                      "Não cobrado"}
+                  </p>
+                </div>
+                <span className="rounded-lg bg-blue-100 px-2 py-1 text-[9px] font-black text-blue-700">
+                  PAGAR
+                </span>
+              </div>
+
+              <div className="mt-3 border-t border-blue-100 pt-3 text-[11px] font-semibold text-blue-700">
+                Vencimento:{" "}
+                <strong>
+                  {formatarDataExecutiva(
+                    coleta.vencimento_transportadora,
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50 to-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-violet-500">
+                    Financeiro ADS
+                  </p>
+                  <p className="mt-2 text-[15px] font-black tracking-[-0.02em] text-violet-950">
+                    {coleta.status_recebimento_ads ||
+                      "Não emitida"}
+                  </p>
+                </div>
+                <span className="rounded-lg bg-violet-100 px-2 py-1 text-[9px] font-black text-violet-700">
+                  RECEBER
+                </span>
+              </div>
+
+              <div className="mt-3 border-t border-violet-100 pt-3 text-[11px] font-semibold text-violet-700">
+                Valor:{" "}
+                <strong>
+                  {formatarMoedaExecutiva(
+                    coleta.valor_nf_cobranca_ads,
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                    Documentos vinculados
+                  </p>
+                  <p className="mt-2 text-[15px] font-black tracking-[-0.02em] text-slate-950">
+                    {
+                      [
+                        coleta.arquivo_nf_cliente,
+                        coleta.arquivo_cte,
+                        coleta.arquivo_nf_cobranca_ads,
+                      ].filter(Boolean).length
+                    }{" "}
+                    de 3 documentos
+                  </p>
+                </div>
+
+                <span className="rounded-lg bg-slate-200 px-2 py-1 text-[9px] font-black text-slate-600">
+                  DOC
+                </span>
+              </div>
+
+              <div className="mt-3 border-t border-slate-200 pt-3 text-[11px] font-semibold text-slate-500">
+                NF cliente • CT-e • NF cobrança ADS
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="sticky top-3 z-50 mb-3 rounded-2xl border border-slate-200 bg-slate-950/95 p-3 text-white shadow-xl backdrop-blur">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
@@ -900,7 +1532,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
             }
             className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:bg-emerald-600 hover:text-white"
           >
-            Histórico
+            Documentos e Histórico
           </button>
         </div>
       </div>
@@ -982,7 +1614,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       <div id="historico" className="scroll-mt-28">
       <details className="group">
         <summary className="mb-4 cursor-pointer list-none rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50">
-          Histórico da coleta
+          Documentos e Histórico
         </summary>
 
         <HistoricoColeta
@@ -1195,6 +1827,39 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 className={campo}
               />
             </label>
+
+            <label className={`${rotulo} xl:col-span-2`}>
+              Anexar / substituir Nota Fiscal
+              <input
+                type="file"
+                name="arquivoNfCliente"
+                accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
+                className={campoArquivo}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                PDF, XML, JPG ou PNG · máximo 10 MB.
+                {coleta.arquivo_nf_cliente
+                  ? " Um novo arquivo substituirá o atual."
+                  : " Nenhum arquivo anexado ainda."}
+              </span>
+
+              {coleta.arquivo_nf_cliente && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    abrirDocumentoAtual(
+                      coleta.arquivo_nf_cliente,
+                      "nf-cliente",
+                    )
+                  }
+                  className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
+                >
+                  {abrindoDocumento === "nf-cliente"
+                    ? "Abrindo..."
+                    : "Abrir NF atual"}
+                </button>
+              )}
+            </label>
           </div>
         </article>
 
@@ -1327,6 +1992,36 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 defaultValue={coleta.conhecimento ?? ""}
                 className={campo}
               />
+            </label>
+
+            <label className={rotulo}>
+              Anexar / substituir CT-e
+              <input
+                type="file"
+                name="arquivoCte"
+                accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
+                className={campoArquivo}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                PDF, XML, JPG ou PNG · máximo 10 MB.
+                {coleta.arquivo_cte
+                  ? " Um novo arquivo substituirá o atual."
+                  : " Nenhum arquivo anexado ainda."}
+              </span>
+
+              {coleta.arquivo_cte && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    abrirDocumentoAtual(coleta.arquivo_cte, "cte")
+                  }
+                  className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 transition hover:bg-blue-100"
+                >
+                  {abrindoDocumento === "cte"
+                    ? "Abrindo..."
+                    : "Abrir CT-e atual"}
+                </button>
+              )}
             </label>
 
             <label className={rotulo}>
@@ -1508,6 +2203,39 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 defaultValue={coleta.numero_nf_cobranca_ads ?? ""}
                 className={campo}
               />
+            </label>
+
+            <label className={rotulo}>
+              Anexar / substituir NF de cobrança
+              <input
+                type="file"
+                name="arquivoNfCobrancaAds"
+                accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
+                className={campoArquivo}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                PDF, XML, JPG ou PNG · máximo 10 MB.
+                {coleta.arquivo_nf_cobranca_ads
+                  ? " Um novo arquivo substituirá o atual."
+                  : " Nenhum arquivo anexado ainda."}
+              </span>
+
+              {coleta.arquivo_nf_cobranca_ads && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    abrirDocumentoAtual(
+                      coleta.arquivo_nf_cobranca_ads,
+                      "nf-ads",
+                    )
+                  }
+                  className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 transition hover:bg-violet-100"
+                >
+                  {abrindoDocumento === "nf-ads"
+                    ? "Abrindo..."
+                    : "Abrir NF atual"}
+                </button>
+              )}
             </label>
 
             <label className={rotulo}>
