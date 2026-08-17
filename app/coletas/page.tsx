@@ -235,7 +235,7 @@ function obterStatusAtual(coleta: Coleta) {
       return "NF vencida";
     }
 
-    return "NF de cobrança emitida";
+    return "Aguardando pagamento";
   }
 
   /*
@@ -298,7 +298,7 @@ function classeStatusAtual(status: string): VisualStatus {
   if (
     status === "CT-e não pago" ||
     status === "NF de cobrança não emitida" ||
-    status === "NF de cobrança emitida" ||
+    status === "Aguardando pagamento" ||
     status === "Aguardando pagamento do cliente"
   ) {
     return {
@@ -863,7 +863,7 @@ function TodasAsColetasContent() {
                   <option value="CT-e não pago">CT-e não pago</option>
                   <option value="CT-e vencido">CT-e vencido</option>
                   <option value="NF de cobrança não emitida">NF de cobrança não emitida</option>
-                  <option value="NF de cobrança emitida">NF de cobrança emitida</option>
+                  <option value="Aguardando pagamento">Aguardando pagamento</option>
                   <option value="Aguardando pagamento do cliente">Aguardando pagamento do cliente</option>
                   <option value="NF vencida">NF vencida</option>
                   <option value="Finalizado">Finalizado</option>
