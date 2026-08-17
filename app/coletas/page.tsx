@@ -199,8 +199,50 @@ function statusCobrancaPaga(coleta: Coleta) {
 function obterStatusAtual(coleta: Coleta) {
   const statusOperacional = (coleta.status ?? "").trim();
 
-  // Enquanto a operação física ainda não terminou,
-  // o status atual continua sendo o operacional.
+  /*
+   * STATUS CONSOLIDADO
+   *
+   * A regra aqui é sempre dar prioridade para a etapa mais avançada
+   * que já possui informação preenchida no sistema.
+   *
+   * Exemplo:
+   * - se a coleta ainda está apenas na operação, mostramos o status operacional;
+   * - se já existe cobrança da transportadora, mostramos o status do CT-e;
+   * - se já existe NF de cobrança da ADS, essa etapa passa a ter prioridade;
+   * - quando tudo estiver pago, mostramos Finalizado.
+   */
+
+  const temNfCobranca =
+    Boolean(coleta.numero_nf_cobranca_ads) ||
+    Boolean(coleta.data_emissao_nf_cobranca_ads) ||
+    coleta.valor_nf_cobranca_ads !== null ||
+    Boolean(coleta.vencimento_nf_cobranca_ads);
+
+  /*
+   * ETAPA 3 — FINANCEIRO ADS
+   * Se a NF de cobrança já foi emitida/preenchida, ela é a etapa
+   * mais avançada e deve prevalecer sobre "Coleta realizada".
+   */
+  if (temNfCobranca) {
+    if (statusCobrancaPaga(coleta)) {
+      return "Finalizado";
+    }
+
+    if (
+      coleta.vencimento_nf_cobranca_ads &&
+      dataVencida(coleta.vencimento_nf_cobranca_ads)
+    ) {
+      return "NF vencida";
+    }
+
+    return "NF de cobrança emitida";
+  }
+
+  /*
+   * ETAPA 1 — OPERAÇÃO
+   * Enquanto a operação física ainda não terminou e ainda não existe
+   * uma NF de cobrança da ADS, mantemos o status operacional.
+   */
   if (
     statusOperacional &&
     statusOperacional !== "Recebido na ADS" &&
@@ -209,7 +251,10 @@ function obterStatusAtual(coleta: Coleta) {
     return statusOperacional;
   }
 
-  // Depois da chegada à ADS, a prioridade passa para o CT-e.
+  /*
+   * ETAPA 2 — FINANCEIRO TRANSPORTADORA
+   * Depois do recebimento/finalização operacional, verificamos o CT-e.
+   */
   if (cteSeAplica(coleta) && !statusCtePago(coleta)) {
     if (
       coleta.vencimento_transportadora &&
@@ -221,29 +266,11 @@ function obterStatusAtual(coleta: Coleta) {
     return "CT-e não pago";
   }
 
-  // Depois do CT-e resolvido, verificamos a cobrança ao cliente.
-  const temNfCobranca =
-    Boolean(coleta.numero_nf_cobranca_ads) ||
-    Boolean(coleta.data_emissao_nf_cobranca_ads) ||
-    coleta.valor_nf_cobranca_ads !== null ||
-    Boolean(coleta.vencimento_nf_cobranca_ads);
-
-  if (!temNfCobranca) {
-    return "NF de cobrança não emitida";
-  }
-
-  if (!statusCobrancaPaga(coleta)) {
-    if (
-      coleta.vencimento_nf_cobranca_ads &&
-      dataVencida(coleta.vencimento_nf_cobranca_ads)
-    ) {
-      return "NF vencida";
-    }
-
-    return "Aguardando pagamento do cliente";
-  }
-
-  return "Finalizado";
+  /*
+   * Se a operação já terminou, o CT-e está pago ou não se aplica,
+   * e ainda não existe NF de cobrança da ADS.
+   */
+  return "NF de cobrança não emitida";
 }
 
 function classeStatusAtual(status: string): VisualStatus {
@@ -271,6 +298,7 @@ function classeStatusAtual(status: string): VisualStatus {
   if (
     status === "CT-e não pago" ||
     status === "NF de cobrança não emitida" ||
+    status === "NF de cobrança emitida" ||
     status === "Aguardando pagamento do cliente"
   ) {
     return {
@@ -835,6 +863,7 @@ function TodasAsColetasContent() {
                   <option value="CT-e não pago">CT-e não pago</option>
                   <option value="CT-e vencido">CT-e vencido</option>
                   <option value="NF de cobrança não emitida">NF de cobrança não emitida</option>
+                  <option value="NF de cobrança emitida">NF de cobrança emitida</option>
                   <option value="Aguardando pagamento do cliente">Aguardando pagamento do cliente</option>
                   <option value="NF vencida">NF vencida</option>
                   <option value="Finalizado">Finalizado</option>
