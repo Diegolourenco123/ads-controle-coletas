@@ -10,6 +10,13 @@ import HistoricoColeta from "./HistoricoColeta";
 
 type Aba = "operacao" | "transportadora" | "ads";
 
+type PerfilUsuario =
+  | "administrador"
+  | "gestor_operacional"
+  | "operacional"
+  | "financeiro"
+  | "consulta";
+
 type ClienteMestre = {
   id: number;
   razao_social: string | null;
@@ -83,12 +90,12 @@ type Coleta = {
 };
 
 const campo =
-  "mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
+  "mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100";
 
 const rotulo = "text-sm font-semibold text-slate-700";
 
 const campoArquivo =
-  "mt-2 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200";
+  "mt-2 block w-full cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50/40 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-emerald-700 hover:file:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-100";
 
 const BUCKET_DOCUMENTOS = "documentos-coletas";
 const LIMITE_ARQUIVO = 10 * 1024 * 1024;
@@ -446,6 +453,109 @@ export default function FormEditarColeta({ id }: { id: number }) {
     "sucesso" | "erro" | "carregando"
   >("sucesso");
 
+  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [carregandoPerfil, setCarregandoPerfil] = useState(true);
+
+  const podeEditarOperacao =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional" ||
+    perfil === "operacional";
+
+  const podeEditarFinanceiro =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional" ||
+    perfil === "financeiro";
+
+  const podeExcluir =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional";
+
+  const podeSalvar = podeEditarOperacao || podeEditarFinanceiro;
+
+  const modoConsulta = perfil === "consulta";
+
+  useEffect(() => {
+    let componenteAtivo = true;
+
+    async function carregarPerfilUsuario() {
+      try {
+        const {
+          data: { user },
+          error: erroUsuario,
+        } = await supabase.auth.getUser();
+
+        if (erroUsuario || !user) {
+          if (componenteAtivo) {
+            setPerfil("consulta");
+            setCarregandoPerfil(false);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("usuarios_perfis")
+          .select("perfil, ativo")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Erro ao carregar perfil do usuário:", error);
+
+          if (componenteAtivo) {
+            setPerfil("consulta");
+            setCarregandoPerfil(false);
+          }
+          return;
+        }
+
+        const perfisValidos: PerfilUsuario[] = [
+          "administrador",
+          "gestor_operacional",
+          "operacional",
+          "financeiro",
+          "consulta",
+        ];
+
+        const perfilRecebido = data?.perfil as PerfilUsuario | undefined;
+
+        if (
+          !data ||
+          data.ativo === false ||
+          !perfilRecebido ||
+          !perfisValidos.includes(perfilRecebido)
+        ) {
+          if (componenteAtivo) {
+            setPerfil("consulta");
+            setCarregandoPerfil(false);
+          }
+          return;
+        }
+
+        if (componenteAtivo) {
+          setPerfil(perfilRecebido);
+          setCarregandoPerfil(false);
+
+          if (perfilRecebido === "financeiro") {
+            setAbaAtiva("ads");
+          }
+        }
+      } catch (erro) {
+        console.error("Erro inesperado ao carregar perfil:", erro);
+
+        if (componenteAtivo) {
+          setPerfil("consulta");
+          setCarregandoPerfil(false);
+        }
+      }
+    }
+
+    carregarPerfilUsuario();
+
+    return () => {
+      componenteAtivo = false;
+    };
+  }, []);
+
   useEffect(() => {
     async function carregarCadastrosMestres() {
       setCarregandoCadastros(true);
@@ -674,6 +784,12 @@ export default function FormEditarColeta({ id }: { id: number }) {
   ) {
     evento.preventDefault();
 
+    if (!podeSalvar) {
+      setTipoMensagem("erro");
+      setMensagem("Seu perfil possui acesso somente para consulta desta coleta.");
+      return;
+    }
+
     const formulario = evento.currentTarget;
 
     if (!formulario.checkValidity()) {
@@ -769,7 +885,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       return;
     }
 
-    const atualizacao = {
+    const atualizacaoOperacional: Partial<Coleta> = {
       data_solicitacao: valorOuNulo("dataSolicitacao"),
       cliente: valorOuNulo("cliente"),
       loja: valorOuNulo("unidade"),
@@ -786,7 +902,6 @@ export default function FormEditarColeta({ id }: { id: number }) {
 
       arquivo_nf_cliente: caminhoNfCliente,
       arquivo_cte: caminhoCte,
-      arquivo_nf_cobranca_ads: caminhoNfCobrancaAds,
 
       transportadora: valorOuNulo("transportadora"),
       data_envio_transportadora: valorOuNulo("dataEnvioTransportadora"),
@@ -803,7 +918,9 @@ export default function FormEditarColeta({ id }: { id: number }) {
       destino: valorOuNulo("destino"),
       responsavel_recebimento: valorOuNulo("responsavelRecebimento"),
       observacoes: valorOuNulo("observacoes"),
+    };
 
+    const atualizacaoFinanceira: Partial<Coleta> = {
       valor_frete: numeroOuNulo("valorFrete"),
       data_recebimento_cobranca_transportadora: valorOuNulo(
         "dataRecebimentoCobrancaTransportadora",
@@ -820,6 +937,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       ),
 
       numero_nf_cobranca_ads: valorOuNulo("numeroNfCobrancaAds"),
+      arquivo_nf_cobranca_ads: caminhoNfCobrancaAds,
       data_emissao_nf_cobranca_ads: valorOuNulo(
         "dataEmissaoNfCobrancaAds",
       ),
@@ -834,6 +952,11 @@ export default function FormEditarColeta({ id }: { id: number }) {
       observacoes_cobranca_ads: valorOuNulo(
         "observacoesCobrancaAds",
       ),
+    };
+
+    const atualizacao: Partial<Coleta> = {
+      ...(podeEditarOperacao ? atualizacaoOperacional : {}),
+      ...(podeEditarFinanceiro ? atualizacaoFinanceira : {}),
     };
 
     const {
@@ -938,7 +1061,9 @@ export default function FormEditarColeta({ id }: { id: number }) {
 
     setTipoMensagem("sucesso");
     setMensagem(
-      `Alterações salvas com sucesso! Status atualizado para: ${statusAutomatico}.${avisoHistorico}`,
+      podeEditarOperacao
+        ? `Alterações salvas com sucesso! Status atualizado para: ${statusAutomatico}.${avisoHistorico}`
+        : `Alterações financeiras salvas com sucesso!${avisoHistorico}`,
     );
     setSalvando(false);
     router.refresh();
@@ -950,6 +1075,12 @@ export default function FormEditarColeta({ id }: { id: number }) {
   }
 
   async function excluirColeta() {
+    if (!podeExcluir) {
+      setTipoMensagem("erro");
+      setMensagem("Seu perfil não possui permissão para excluir esta coleta.");
+      return;
+    }
+
     const confirmou = window.confirm(
       `Tem certeza que deseja excluir a coleta #${id}? Esta ação não poderá ser desfeita.`,
     );
@@ -1025,10 +1156,10 @@ export default function FormEditarColeta({ id }: { id: number }) {
     return "border-emerald-200 bg-emerald-50 text-emerald-800";
   }
 
-  if (carregando) {
+  if (carregando || carregandoPerfil) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm">
-        Carregando coleta...
+        Carregando coleta e permissões...
       </div>
     );
   }
@@ -1059,6 +1190,33 @@ export default function FormEditarColeta({ id }: { id: number }) {
       {erroCadastros && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
           {erroCadastros}
+        </div>
+      )}
+
+      {modoConsulta && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4">
+          <p className="text-sm font-bold text-blue-800">Modo consulta</p>
+          <p className="mt-1 text-sm text-blue-700">
+            Você pode visualizar a coleta, a timeline, o histórico e abrir documentos, mas não pode alterar ou excluir informações.
+          </p>
+        </div>
+      )}
+
+      {perfil === "financeiro" && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4">
+          <p className="text-sm font-bold text-violet-800">Modo financeiro</p>
+          <p className="mt-1 text-sm text-violet-700">
+            Os dados operacionais estão disponíveis para consulta. Somente as informações financeiras podem ser alteradas.
+          </p>
+        </div>
+      )}
+
+      {perfil === "operacional" && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <p className="text-sm font-bold text-emerald-800">Modo operacional</p>
+          <p className="mt-1 text-sm text-emerald-700">
+            Os dados operacionais podem ser alterados. As etapas financeiras estão disponíveis somente para consulta.
+          </p>
         </div>
       )}
 
@@ -1672,6 +1830,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataSolicitacao"
+                disabled={!podeEditarOperacao}
                 required
                 defaultValue={coleta.data_solicitacao ?? ""}
                 className={campo}
@@ -1684,7 +1843,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 name="cliente"
                 required
                 defaultValue={coleta.cliente ?? ""}
-                disabled={carregandoCadastros}
+                disabled={carregandoCadastros || !podeEditarOperacao}
                 onChange={selecionarCliente}
                 className={campo}
               >
@@ -1722,6 +1881,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="unidade"
+                disabled={!podeEditarOperacao}
                 required
                 defaultValue={coleta.loja ?? ""}
                 className={campo}
@@ -1733,6 +1893,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="cidade"
+                disabled={!podeEditarOperacao}
                 required
                 defaultValue={coleta.cidade ?? ""}
                 className={campo}
@@ -1743,6 +1904,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               Estado *
               <select
                 name="estado"
+                disabled={!podeEditarOperacao}
                 required
                 defaultValue={coleta.estado ?? ""}
                 className={campo}
@@ -1763,6 +1925,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="responsavelSolicitacao"
+                disabled={!podeEditarOperacao}
                 defaultValue={
                   coleta.responsavel_solicitacao ??
                   coleta.responsavel ??
@@ -1793,6 +1956,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataOv"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.data_ov ?? ""}
                 className={campo}
               />
@@ -1803,6 +1967,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="numeroOv"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.numero_ov ?? ""}
                 className={campo}
               />
@@ -1813,6 +1978,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataNotaFiscal"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.data_nf ?? ""}
                 className={campo}
               />
@@ -1823,6 +1989,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="numeroNotaFiscal"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.numero_nf ?? ""}
                 className={campo}
               />
@@ -1833,6 +2000,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="file"
                 name="arquivoNfCliente"
+                disabled={!podeEditarOperacao}
                 accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
                 className={campoArquivo}
               />
@@ -1882,7 +2050,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <select
                 name="transportadora"
                 defaultValue={coleta.transportadora ?? ""}
-                disabled={carregandoCadastros}
+                disabled={carregandoCadastros || !podeEditarOperacao}
                 onChange={selecionarTransportadora}
                 className={campo}
               >
@@ -1919,6 +2087,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataEnvioTransportadora"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.data_envio_transportadora ?? ""}
                 className={campo}
               />
@@ -1929,6 +2098,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataPrevistaColeta"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.data_prevista_coleta ?? ""}
                 className={campo}
               />
@@ -1939,6 +2109,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="contatoTransportadora"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.contato_transportadora ?? ""}
                 className={campo}
               />
@@ -1975,6 +2146,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataEfetivaColeta"
+                disabled={!podeEditarOperacao}
                 defaultValue={
                   coleta.data_efetiva_coleta ??
                   coleta.data_coleta ??
@@ -1989,6 +2161,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="conhecimento"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.conhecimento ?? ""}
                 className={campo}
               />
@@ -1999,6 +2172,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="file"
                 name="arquivoCte"
+                disabled={!podeEditarOperacao}
                 accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
                 className={campoArquivo}
               />
@@ -2029,6 +2203,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataChegadaAds"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.data_chegada_ads ?? ""}
                 className={campo}
               />
@@ -2039,6 +2214,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="number"
                 name="peso"
+                disabled={!podeEditarOperacao}
                 min="0"
                 step="0.01"
                 defaultValue={coleta.peso ?? ""}
@@ -2051,6 +2227,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="destino"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.destino ?? ""}
                 className={campo}
               />
@@ -2061,6 +2238,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="responsavelRecebimento"
+                disabled={!podeEditarOperacao}
                 defaultValue={coleta.responsavel_recebimento ?? ""}
                 className={campo}
               />
@@ -2073,6 +2251,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
             Observações operacionais
             <textarea
               name="observacoes"
+              disabled={!podeEditarOperacao}
               rows={5}
               defaultValue={coleta.observacoes ?? ""}
               className={campo}
@@ -2105,6 +2284,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="number"
                 name="valorFrete"
+                disabled={!podeEditarFinanceiro}
                 min="0"
                 step="0.01"
                 defaultValue={coleta.valor_frete ?? ""}
@@ -2117,6 +2297,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataRecebimentoCobrancaTransportadora"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={
                   coleta.data_recebimento_cobranca_transportadora ?? ""
                 }
@@ -2129,6 +2310,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="vencimentoTransportadora"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.vencimento_transportadora ?? ""}
                 className={campo}
               />
@@ -2138,6 +2320,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               Situação do pagamento
               <select
                 name="statusPagamentoTransportadora"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={
                   coleta.status_pagamento_transportadora ?? "Não cobrado"
                 }
@@ -2158,6 +2341,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataPagamentoTransportadora"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.data_pagamento_transportadora ?? ""}
                 className={campo}
               />
@@ -2170,6 +2354,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
             Observações do pagamento da transportadora
             <textarea
               name="observacoesPagamentoTransportadora"
+              disabled={!podeEditarFinanceiro}
               rows={5}
               defaultValue={
                 coleta.observacoes_pagamento_transportadora ?? ""
@@ -2200,6 +2385,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="text"
                 name="numeroNfCobrancaAds"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.numero_nf_cobranca_ads ?? ""}
                 className={campo}
               />
@@ -2210,6 +2396,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="file"
                 name="arquivoNfCobrancaAds"
+                disabled={!podeEditarFinanceiro}
                 accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
                 className={campoArquivo}
               />
@@ -2243,6 +2430,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataEmissaoNfCobrancaAds"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.data_emissao_nf_cobranca_ads ?? ""}
                 className={campo}
               />
@@ -2253,6 +2441,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="number"
                 name="valorNfCobrancaAds"
+                disabled={!podeEditarFinanceiro}
                 min="0"
                 step="0.01"
                 defaultValue={coleta.valor_nf_cobranca_ads ?? ""}
@@ -2265,6 +2454,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="vencimentoNfCobrancaAds"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.vencimento_nf_cobranca_ads ?? ""}
                 className={campo}
               />
@@ -2274,6 +2464,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               Situação do recebimento
               <select
                 name="statusRecebimentoAds"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={
                   coleta.status_recebimento_ads ?? "Não emitida"
                 }
@@ -2295,6 +2486,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
               <input
                 type="date"
                 name="dataRecebimentoPagamentoAds"
+                disabled={!podeEditarFinanceiro}
                 defaultValue={
                   coleta.data_recebimento_pagamento_ads ?? ""
                 }
@@ -2309,6 +2501,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
             Observações da cobrança ADS
             <textarea
               name="observacoesCobrancaAds"
+              disabled={!podeEditarFinanceiro}
               rows={5}
               defaultValue={coleta.observacoes_cobranca_ads ?? ""}
               className={campo}
@@ -2318,14 +2511,20 @@ export default function FormEditarColeta({ id }: { id: number }) {
       </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={excluirColeta}
-          disabled={salvando || excluindo}
-          className="rounded-xl border border-red-300 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {excluindo ? "Excluindo..." : "Excluir coleta"}
-        </button>
+        {podeExcluir ? (
+          <button
+            type="button"
+            onClick={excluirColeta}
+            disabled={salvando || excluindo}
+            className="rounded-xl border border-red-300 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {excluindo ? "Excluindo..." : "Excluir coleta"}
+          </button>
+        ) : (
+          <span className="text-xs font-semibold text-slate-400">
+            {modoConsulta ? "Somente consulta" : "Exclusão não permitida para este perfil"}
+          </span>
+        )}
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row">
           <Link
@@ -2335,13 +2534,15 @@ export default function FormEditarColeta({ id }: { id: number }) {
             Voltar
           </Link>
 
-          <button
-            type="submit"
-            disabled={salvando || excluindo}
-            className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {salvando ? "Salvando..." : "Salvar alterações"}
-          </button>
+          {podeSalvar && (
+            <button
+              type="submit"
+              disabled={salvando || excluindo}
+              className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {salvando ? "Salvando..." : "Salvar alterações"}
+            </button>
+          )}
         </div>
       </div>
     </form>

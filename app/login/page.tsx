@@ -54,10 +54,25 @@ export default function LoginPage() {
               </div>
             </article>
 
-            {/* Rodapé */}
-            <p className="mt-7 text-center text-xs font-medium text-slate-400">
-              © ADS Logística Ambiental
-            </p>
+            {/* ==================================================
+                ASSINATURA DO SISTEMA
+            ================================================== */}
+            <div className="mt-7 text-center">
+              <p className="text-xs font-semibold text-slate-500">
+                ADS Controle de Coletas
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-400">
+                Desenvolvido por{" "}
+                <span className="font-semibold text-emerald-600">
+                  Diego Farias
+                </span>
+              </p>
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                © 2026 ADS Logística Ambiental • v1.0
+              </p>
+            </div>
           </div>
         </section>
       </div>

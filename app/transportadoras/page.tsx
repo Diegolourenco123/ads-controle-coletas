@@ -11,6 +11,13 @@ import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import { supabase } from "../lib/supabase";
 
+type PerfilUsuario =
+  | "administrador"
+  | "gestor_operacional"
+  | "operacional"
+  | "financeiro"
+  | "consulta";
+
 type Transportadora = {
   id: number;
   nome: string;
@@ -64,6 +71,21 @@ export default function TransportadorasPage() {
     setTransportadoraVisualizando,
   ] = useState<Transportadora | null>(null);
 
+  const [perfil, setPerfil] =
+    useState<PerfilUsuario | null>(null);
+
+  const [carregandoPerfil, setCarregandoPerfil] =
+    useState(true);
+
+  const podeCadastrarOuEditar =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional" ||
+    perfil === "operacional";
+
+  const podeExcluir =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional";
+
   async function carregarTransportadoras() {
     setCarregando(true);
 
@@ -90,8 +112,72 @@ export default function TransportadorasPage() {
     setCarregando(false);
   }
 
+  async function carregarPerfil() {
+    try {
+      const {
+        data: { user },
+        error: erroUsuario,
+      } = await supabase.auth.getUser();
+
+      if (erroUsuario || !user) {
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("usuarios_perfis")
+        .select("perfil, ativo")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Erro ao carregar perfil do usuário:",
+          error,
+        );
+
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      const perfisValidos: PerfilUsuario[] = [
+        "administrador",
+        "gestor_operacional",
+        "operacional",
+        "financeiro",
+        "consulta",
+      ];
+
+      if (
+        !data ||
+        data.ativo === false ||
+        !perfisValidos.includes(
+          data.perfil as PerfilUsuario,
+        )
+      ) {
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      setPerfil(data.perfil as PerfilUsuario);
+      setCarregandoPerfil(false);
+    } catch (erro) {
+      console.error(
+        "Erro inesperado ao carregar perfil:",
+        erro,
+      );
+
+      setPerfil("consulta");
+      setCarregandoPerfil(false);
+    }
+  }
+
   useEffect(() => {
     carregarTransportadoras();
+    carregarPerfil();
   }, []);
 
   function preencherCampo(
@@ -118,6 +204,13 @@ export default function TransportadorasPage() {
   function iniciarEdicao(
     transportadora: Transportadora,
   ) {
+    if (!podeCadastrarOuEditar) {
+      setMensagem(
+        "Seu perfil possui acesso somente para consulta às transportadoras.",
+      );
+      return;
+    }
+
     setTransportadoraEditando(
       transportadora,
     );
@@ -179,6 +272,13 @@ export default function TransportadorasPage() {
     evento: FormEvent<HTMLFormElement>,
   ) {
     evento.preventDefault();
+
+    if (!podeCadastrarOuEditar) {
+      setMensagem(
+        "Seu perfil possui acesso somente para consulta às transportadoras.",
+      );
+      return;
+    }
 
     const formulario =
       evento.currentTarget;
@@ -312,6 +412,13 @@ export default function TransportadorasPage() {
     id: number,
     nome: string,
   ) {
+    if (!podeExcluir) {
+      setMensagem(
+        "Seu perfil não possui permissão para excluir transportadoras.",
+      );
+      return;
+    }
+
     const confirmou =
       window.confirm(
         `Deseja realmente excluir a transportadora "${nome}"?`,
@@ -542,7 +649,20 @@ export default function TransportadorasPage() {
             )}
           </section>
 
-          {/* FORMULÁRIO */}
+          {/* FORMULÁRIO / PERMISSÕES */}
+          {!carregandoPerfil && !podeCadastrarOuEditar && (
+            <div className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4">
+              <p className="text-sm font-bold text-blue-800">
+                Acesso somente para consulta
+              </p>
+
+              <p className="mt-1 text-sm text-blue-700">
+                Você pode pesquisar e visualizar as transportadoras cadastradas, mas não pode cadastrar, editar ou excluir registros.
+              </p>
+            </div>
+          )}
+
+          {podeCadastrarOuEditar && (
           <form
             ref={formularioRef}
             onSubmit={salvarTransportadora}
@@ -675,6 +795,7 @@ export default function TransportadorasPage() {
               </button>
             </div>
           </form>
+          )}
 
           {/* LISTA */}
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -805,30 +926,34 @@ export default function TransportadorasPage() {
                                 Visualizar
                               </button>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  iniciarEdicao(
-                                    transportadora,
-                                  )
-                                }
-                                className="whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
-                              >
-                                Editar
-                              </button>
+                              {podeCadastrarOuEditar && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    iniciarEdicao(
+                                      transportadora,
+                                    )
+                                  }
+                                  className="whitespace-nowrap rounded-lg bg-emerald-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-700"
+                                >
+                                  Editar
+                                </button>
+                              )}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  excluirTransportadora(
-                                    transportadora.id,
-                                    transportadora.nome,
-                                  )
-                                }
-                                className="whitespace-nowrap rounded-lg bg-red-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-red-700"
-                              >
-                                Excluir
-                              </button>
+                              {podeExcluir && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    excluirTransportadora(
+                                      transportadora.id,
+                                      transportadora.nome,
+                                    )
+                                  }
+                                  className="whitespace-nowrap rounded-lg bg-red-600 px-2.5 py-2 text-[11px] font-semibold text-white transition hover:bg-red-700"
+                                >
+                                  Excluir
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1052,21 +1177,23 @@ export default function TransportadorasPage() {
             </div>
 
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 p-5">
-              <button
-                type="button"
-                onClick={() => {
-                  iniciarEdicao(
-                    transportadoraVisualizando,
-                  );
+              {podeCadastrarOuEditar && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    iniciarEdicao(
+                      transportadoraVisualizando,
+                    );
 
-                  setTransportadoraVisualizando(
-                    null,
-                  );
-                }}
-                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                Editar transportadora
-              </button>
+                    setTransportadoraVisualizando(
+                      null,
+                    );
+                  }}
+                  className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                >
+                  Editar transportadora
+                </button>
+              )}
 
               <button
                 type="button"

@@ -44,6 +44,14 @@ type Coleta = {
   situacao_recebimento: string | null;
 };
 
+
+type PerfilUsuario =
+  | "administrador"
+  | "gestor_operacional"
+  | "operacional"
+  | "financeiro"
+  | "consulta";
+
 function formatarData(data: string | null) {
   if (!data) {
     return "—";
@@ -536,6 +544,72 @@ function TodasAsColetasContent() {
   const [erro, setErro] = useState("");
   const [excluindoId, setExcluindoId] =
     useState<number | null>(null);
+  const [perfilUsuario, setPerfilUsuario] =
+    useState<PerfilUsuario | null>(null);
+
+  useEffect(() => {
+    let componenteAtivo = true;
+
+    async function carregarPerfilUsuario() {
+      try {
+        const { data: authData, error: authError } =
+          await supabase.auth.getUser();
+
+        if (authError || !authData.user) {
+          if (componenteAtivo) {
+            setPerfilUsuario("consulta");
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("usuarios_perfis")
+          .select("perfil, ativo")
+          .eq("user_id", authData.user.id)
+          .maybeSingle();
+
+        if (error || !data || data.ativo === false) {
+          if (error) {
+            console.error("Erro ao carregar perfil do usuário:", error);
+          }
+
+          if (componenteAtivo) {
+            setPerfilUsuario("consulta");
+          }
+          return;
+        }
+
+        const perfilRecebido = data.perfil as PerfilUsuario;
+        const perfisValidos: PerfilUsuario[] = [
+          "administrador",
+          "gestor_operacional",
+          "operacional",
+          "financeiro",
+          "consulta",
+        ];
+
+        if (componenteAtivo) {
+          setPerfilUsuario(
+            perfisValidos.includes(perfilRecebido)
+              ? perfilRecebido
+              : "consulta",
+          );
+        }
+      } catch (erro) {
+        console.error("Erro inesperado ao carregar perfil:", erro);
+
+        if (componenteAtivo) {
+          setPerfilUsuario("consulta");
+        }
+      }
+    }
+
+    carregarPerfilUsuario();
+
+    return () => {
+      componenteAtivo = false;
+    };
+  }, []);
 
   useEffect(() => {
     let componenteAtivo = true;
@@ -648,7 +722,22 @@ function TodasAsColetasContent() {
     };
   }, []);
 
+  const podeCriarColeta =
+    perfilUsuario === "administrador" ||
+    perfilUsuario === "gestor_operacional" ||
+    perfilUsuario === "operacional";
+
+  const podeEditarColeta = podeCriarColeta;
+
+  const podeExcluirColeta =
+    perfilUsuario === "administrador" ||
+    perfilUsuario === "gestor_operacional";
+
   async function excluirColeta(coleta: Coleta) {
+    if (!podeExcluirColeta) {
+      setErro("Seu perfil não possui permissão para excluir coletas.");
+      return;
+    }
     const identificacao =
       coleta.numero_ov ||
       coleta.loja ||
@@ -773,13 +862,15 @@ function TodasAsColetasContent() {
               )}
             </div>
 
-            <Link
-              href="/coletas/nova"
-              className="inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-            >
-              <IconeMais />
-              Nova coleta
-            </Link>
+            {podeCriarColeta && (
+              <Link
+                href="/coletas/nova"
+                className="inline-flex w-fit items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+              >
+                <IconeMais />
+                Nova coleta
+              </Link>
+            )}
           </div>
 
           {/* RESUMO */}
@@ -1029,34 +1120,42 @@ function TodasAsColetasContent() {
 
                             <td className="whitespace-nowrap px-3 py-3">
                               <div className="flex items-center gap-2">
-                                <Link
-                                  href={`/coletas/${coleta.id}`}
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
-                                >
-                                  <IconeEditar />
-                                  Editar
-                                </Link>
+                                {podeEditarColeta ? (
+                                  <Link
+                                    href={`/coletas/${coleta.id}`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                                  >
+                                    <IconeEditar />
+                                    Editar
+                                  </Link>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-500">
+                                    Somente consulta
+                                  </span>
+                                )}
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    excluirColeta(
-                                      coleta,
-                                    )
-                                  }
-                                  disabled={
-                                    excluindoId ===
+                                {podeExcluirColeta && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      excluirColeta(
+                                        coleta,
+                                      )
+                                    }
+                                    disabled={
+                                      excluindoId ===
+                                      coleta.id
+                                    }
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    <IconeExcluir />
+
+                                    {excluindoId ===
                                     coleta.id
-                                  }
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-red-700 transition hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <IconeExcluir />
-
-                                  {excluindoId ===
-                                  coleta.id
-                                    ? "Excluindo..."
-                                    : "Excluir"}
-                                </button>
+                                      ? "Excluindo..."
+                                      : "Excluir"}
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>

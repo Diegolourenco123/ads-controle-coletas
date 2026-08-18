@@ -5,9 +5,17 @@ import { useEffect, useState } from "react";
 import BotaoSair from "./BotaoSair";
 import { criarClienteSupabaseBrowser } from "../lib/supabase-browser";
 
+type PerfilUsuario =
+  | "administrador"
+  | "gestor_operacional"
+  | "operacional"
+  | "financeiro"
+  | "consulta";
+
 type UsuarioLogado = {
   email: string;
   nome: string;
+  perfil: PerfilUsuario;
 };
 
 function obterNomeUsuario(
@@ -43,6 +51,30 @@ function obterIniciais(nome: string) {
     .toUpperCase();
 }
 
+function obterNomePerfil(
+  perfil: PerfilUsuario,
+) {
+  switch (perfil) {
+    case "administrador":
+      return "Administrador";
+
+    case "gestor_operacional":
+      return "Gestor Operacional";
+
+    case "operacional":
+      return "Operacional";
+
+    case "financeiro":
+      return "Financeiro";
+
+    case "consulta":
+      return "Consulta";
+
+    default:
+      return "Consulta";
+  }
+}
+
 export default function Header() {
   const [usuario, setUsuario] =
     useState<UsuarioLogado | null>(null);
@@ -53,6 +85,73 @@ export default function Header() {
   useEffect(() => {
     const supabase =
       criarClienteSupabaseBrowser();
+
+    async function montarUsuario(
+      user: any,
+    ) {
+      if (!user?.email) {
+        setUsuario(null);
+        setCarregando(false);
+        return;
+      }
+
+      const nomeMetadata =
+        user.user_metadata?.nome ||
+        user.user_metadata?.name ||
+        user.user_metadata?.full_name;
+
+      const {
+        data: perfilUsuario,
+        error: erroPerfil,
+      } = await supabase
+        .from("usuarios_perfis")
+        .select("perfil, ativo")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (erroPerfil) {
+        console.error(
+          "Não foi possível carregar o perfil:",
+          erroPerfil,
+        );
+      }
+
+      let perfil: PerfilUsuario =
+        "consulta";
+
+      if (
+        perfilUsuario?.perfil &&
+        perfilUsuario.ativo !== false
+      ) {
+        const perfilBanco =
+          perfilUsuario.perfil as PerfilUsuario;
+
+        const perfisValidos: PerfilUsuario[] = [
+          "administrador",
+          "gestor_operacional",
+          "operacional",
+          "financeiro",
+          "consulta",
+        ];
+
+        if (
+          perfisValidos.includes(perfilBanco)
+        ) {
+          perfil = perfilBanco;
+        }
+      }
+
+      setUsuario({
+        email: user.email,
+        nome: obterNomeUsuario(
+          user.email,
+          nomeMetadata,
+        ),
+        perfil,
+      });
+
+      setCarregando(false);
+    }
 
     async function carregarUsuario() {
       const {
@@ -80,26 +179,7 @@ export default function Header() {
         return;
       }
 
-      if (!user?.email) {
-        setUsuario(null);
-        setCarregando(false);
-        return;
-      }
-
-      const nomeMetadata =
-        user.user_metadata?.nome ||
-        user.user_metadata?.name ||
-        user.user_metadata?.full_name;
-
-      setUsuario({
-        email: user.email,
-        nome: obterNomeUsuario(
-          user.email,
-          nomeMetadata,
-        ),
-      });
-
-      setCarregando(false);
+      await montarUsuario(user);
     }
 
     carregarUsuario();
@@ -107,29 +187,10 @@ export default function Header() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (_evento, sessao) => {
-        const user = sessao?.user;
-
-        if (!user?.email) {
-          setUsuario(null);
-          setCarregando(false);
-          return;
-        }
-
-        const nomeMetadata =
-          user.user_metadata?.nome ||
-          user.user_metadata?.name ||
-          user.user_metadata?.full_name;
-
-        setUsuario({
-          email: user.email,
-          nome: obterNomeUsuario(
-            user.email,
-            nomeMetadata,
-          ),
-        });
-
-        setCarregando(false);
+      async (_evento, sessao) => {
+        await montarUsuario(
+          sessao?.user,
+        );
       },
     );
 
@@ -202,7 +263,10 @@ export default function Header() {
                 </p>
 
                 <p className="mt-0.5 text-[10px] font-semibold text-emerald-700">
-                  Gestor Operacional • Online
+                  {obterNomePerfil(
+                    usuario.perfil,
+                  )}{" "}
+                  • Online
                 </p>
               </div>
             </div>

@@ -5,6 +5,13 @@ import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import { supabase } from "../lib/supabase";
 
+type PerfilUsuario =
+  | "administrador"
+  | "gestor_operacional"
+  | "operacional"
+  | "financeiro"
+  | "consulta";
+
 type Cliente = {
   id: number;
   razao_social: string;
@@ -76,6 +83,17 @@ export default function ClientesPage() {
   const [salvando, setSalvando] = useState(false);
   const [clienteEmEdicao, setClienteEmEdicao] =
     useState<Cliente | null>(null);
+  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [carregandoPerfil, setCarregandoPerfil] = useState(true);
+
+  const podeCadastrarOuEditar =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional" ||
+    perfil === "operacional";
+
+  const podeExcluir =
+    perfil === "administrador" ||
+    perfil === "gestor_operacional";
 
   async function carregarClientes() {
     setCarregando(true);
@@ -98,14 +116,75 @@ export default function ClientesPage() {
     setCarregando(false);
   }
 
+  async function carregarPerfil() {
+    try {
+      const {
+        data: { user },
+        error: erroUsuario,
+      } = await supabase.auth.getUser();
+
+      if (erroUsuario || !user) {
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("usuarios_perfis")
+        .select("perfil, ativo")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao carregar perfil do usuário:", error);
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      const perfisValidos: PerfilUsuario[] = [
+        "administrador",
+        "gestor_operacional",
+        "operacional",
+        "financeiro",
+        "consulta",
+      ];
+
+      if (
+        !data ||
+        data.ativo === false ||
+        !perfisValidos.includes(data.perfil as PerfilUsuario)
+      ) {
+        setPerfil("consulta");
+        setCarregandoPerfil(false);
+        return;
+      }
+
+      setPerfil(data.perfil as PerfilUsuario);
+      setCarregandoPerfil(false);
+    } catch (erro) {
+      console.error("Erro inesperado ao carregar perfil:", erro);
+      setPerfil("consulta");
+      setCarregandoPerfil(false);
+    }
+  }
+
   useEffect(() => {
     carregarClientes();
+    carregarPerfil();
   }, []);
 
   async function salvarCliente(
     evento: FormEvent<HTMLFormElement>,
   ) {
     evento.preventDefault();
+
+    if (!podeCadastrarOuEditar) {
+      setMensagem(
+        "Seu perfil possui acesso somente para consulta aos clientes.",
+      );
+      return;
+    }
 
     const formulario = evento.currentTarget;
 
@@ -200,6 +279,13 @@ export default function ClientesPage() {
   }
 
   function editarCliente(cliente: Cliente) {
+    if (!podeCadastrarOuEditar) {
+      setMensagem(
+        "Seu perfil possui acesso somente para consulta aos clientes.",
+      );
+      return;
+    }
+
     setClienteEmEdicao(cliente);
     setMensagem("Editando cliente selecionado.");
 
@@ -218,6 +304,13 @@ export default function ClientesPage() {
     id: number,
     nomeCliente: string,
   ) {
+    if (!podeExcluir) {
+      setMensagem(
+        "Seu perfil não possui permissão para excluir clientes.",
+      );
+      return;
+    }
+
     const confirmou = window.confirm(
       `Deseja realmente excluir o cliente "${nomeCliente}"?`,
     );
@@ -385,6 +478,18 @@ export default function ClientesPage() {
             </div>
           </div>
 
+          {!carregandoPerfil && !podeCadastrarOuEditar && (
+            <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4">
+              <p className="text-sm font-bold text-blue-800">
+                Acesso somente para consulta
+              </p>
+              <p className="mt-1 text-sm text-blue-700">
+                Você pode pesquisar e visualizar os clientes cadastrados, mas não pode cadastrar, editar ou excluir registros.
+              </p>
+            </div>
+          )}
+
+          {podeCadastrarOuEditar && (
           <form
             key={clienteEmEdicao?.id ?? "novo"}
             onSubmit={salvarCliente}
@@ -529,6 +634,7 @@ export default function ClientesPage() {
               </button>
             </div>
           </form>
+          )}
 
           <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col justify-between gap-4 border-b border-slate-200 p-5 md:flex-row md:items-center">
@@ -620,12 +726,16 @@ export default function ClientesPage() {
                             <button type="button" onClick={() => setClienteVisualizando(cliente)} className="whitespace-nowrap rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">
                               Visualizar
                             </button>
-                            <button type="button" onClick={() => editarCliente(cliente)} className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700">
-                              Editar
-                            </button>
-                            <button type="button" onClick={() => excluirCliente(cliente.id, nomeExibicao(cliente))} className="whitespace-nowrap rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">
-                              Excluir
-                            </button>
+                            {podeCadastrarOuEditar && (
+                              <button type="button" onClick={() => editarCliente(cliente)} className="whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700">
+                                Editar
+                              </button>
+                            )}
+                            {podeExcluir && (
+                              <button type="button" onClick={() => excluirCliente(cliente.id, nomeExibicao(cliente))} className="whitespace-nowrap rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">
+                                Excluir
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -726,19 +836,21 @@ export default function ClientesPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 border-t border-slate-200 p-5">
-              <button
-                type="button"
-                onClick={() => {
-                  const cliente = clienteVisualizando;
-                  setClienteVisualizando(null);
-                  editarCliente(cliente);
-                }}
-                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-              >
-                Editar cliente
-              </button>
-            </div>
+            {podeCadastrarOuEditar && (
+              <div className="flex justify-end gap-3 border-t border-slate-200 p-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cliente = clienteVisualizando;
+                    setClienteVisualizando(null);
+                    editarCliente(cliente);
+                  }}
+                  className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                >
+                  Editar cliente
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
