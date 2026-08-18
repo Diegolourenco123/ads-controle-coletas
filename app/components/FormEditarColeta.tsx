@@ -206,6 +206,53 @@ function calcularStatusOperacional(dados: FormData) {
   return "Aguardando NF";
 }
 
+function dataHojeLocal() {
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, "0");
+  const dia = String(agora.getDate()).padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
+}
+
+function calcularStatusRecebimentoAdsAutomatico({
+  numeroNf,
+  dataEmissao,
+  vencimento,
+  dataRecebimento,
+  possuiArquivoNf,
+  statusAtual,
+}: {
+  numeroNf: string | null;
+  dataEmissao: string | null;
+  vencimento: string | null;
+  dataRecebimento: string | null;
+  possuiArquivoNf: boolean;
+  statusAtual: string | null;
+}) {
+  const statusNormalizado = normalizarTexto(statusAtual ?? "");
+
+  // "Cancelada" continua sendo uma exceção manual.
+  if (statusNormalizado === "cancelada") {
+    return "Cancelada";
+  }
+
+  if (dataRecebimento) {
+    return "Paga";
+  }
+
+  if (vencimento && vencimento < dataHojeLocal()) {
+    return "Vencida";
+  }
+
+  if (numeroNf || dataEmissao || possuiArquivoNf) {
+    return "Aguardando recebimento";
+  }
+
+  return "Não emitida";
+}
+
+
 
 type EventoHistorico = {
   coleta_id: number;
@@ -625,6 +672,49 @@ export default function FormEditarColeta({ id }: { id: number }) {
     }
   }
 
+  function sincronizarStatusRecebimentoAds() {
+    const formulario = formularioRef.current;
+
+    if (!formulario) return;
+
+    const obterCampo = (nome: string) =>
+      formulario.elements.namedItem(nome) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | null;
+
+    const numeroNf = obterCampo("numeroNfCobrancaAds")?.value.trim() || null;
+    const dataEmissao =
+      obterCampo("dataEmissaoNfCobrancaAds")?.value.trim() || null;
+    const vencimento =
+      obterCampo("vencimentoNfCobrancaAds")?.value.trim() || null;
+    const dataRecebimento =
+      obterCampo("dataRecebimentoPagamentoAds")?.value.trim() || null;
+
+    const campoArquivo = formulario.elements.namedItem(
+      "arquivoNfCobrancaAds",
+    ) as HTMLInputElement | null;
+
+    const possuiArquivoNovo = Boolean(
+      campoArquivo?.files && campoArquivo.files.length > 0,
+    );
+
+    const campoStatus = obterCampo("statusRecebimentoAds");
+
+    if (!campoStatus) return;
+
+    campoStatus.value = calcularStatusRecebimentoAdsAutomatico({
+      numeroNf,
+      dataEmissao,
+      vencimento,
+      dataRecebimento,
+      possuiArquivoNf:
+        possuiArquivoNovo || Boolean(coleta?.arquivo_nf_cobranca_ads),
+      statusAtual: campoStatus.value,
+    });
+  }
+
+
   function selecionarCliente(
     evento: React.ChangeEvent<HTMLSelectElement>,
   ) {
@@ -885,6 +975,16 @@ export default function FormEditarColeta({ id }: { id: number }) {
       return;
     }
 
+    const statusRecebimentoAdsAutomatico =
+      calcularStatusRecebimentoAdsAutomatico({
+        numeroNf: valorOuNulo("numeroNfCobrancaAds"),
+        dataEmissao: valorOuNulo("dataEmissaoNfCobrancaAds"),
+        vencimento: valorOuNulo("vencimentoNfCobrancaAds"),
+        dataRecebimento: valorOuNulo("dataRecebimentoPagamentoAds"),
+        possuiArquivoNf: Boolean(caminhoNfCobrancaAds),
+        statusAtual: valorOuNulo("statusRecebimentoAds"),
+      });
+
     const atualizacaoOperacional: Partial<Coleta> = {
       data_solicitacao: valorOuNulo("dataSolicitacao"),
       cliente: valorOuNulo("cliente"),
@@ -945,7 +1045,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
       vencimento_nf_cobranca_ads: valorOuNulo(
         "vencimentoNfCobrancaAds",
       ),
-      status_recebimento_ads: valorOuNulo("statusRecebimentoAds"),
+      status_recebimento_ads: statusRecebimentoAdsAutomatico,
       data_recebimento_pagamento_ads: valorOuNulo(
         "dataRecebimentoPagamentoAds",
       ),
@@ -2387,6 +2487,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 name="numeroNfCobrancaAds"
                 disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.numero_nf_cobranca_ads ?? ""}
+                onChange={sincronizarStatusRecebimentoAds}
                 className={campo}
               />
             </label>
@@ -2398,6 +2499,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 name="arquivoNfCobrancaAds"
                 disabled={!podeEditarFinanceiro}
                 accept=".pdf,.xml,.jpg,.jpeg,.png,application/pdf,application/xml,text/xml,image/jpeg,image/png"
+                onChange={sincronizarStatusRecebimentoAds}
                 className={campoArquivo}
               />
               <span className="mt-1 block text-xs font-normal text-slate-500">
@@ -2432,6 +2534,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 name="dataEmissaoNfCobrancaAds"
                 disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.data_emissao_nf_cobranca_ads ?? ""}
+                onChange={sincronizarStatusRecebimentoAds}
                 className={campo}
               />
             </label>
@@ -2456,12 +2559,16 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 name="vencimentoNfCobrancaAds"
                 disabled={!podeEditarFinanceiro}
                 defaultValue={coleta.vencimento_nf_cobranca_ads ?? ""}
+                onChange={sincronizarStatusRecebimentoAds}
                 className={campo}
               />
             </label>
 
             <label className={rotulo}>
               Situação do recebimento
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+                Automático
+              </span>
               <select
                 name="statusRecebimentoAds"
                 disabled={!podeEditarFinanceiro}
@@ -2479,6 +2586,10 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 <option value="Vencida">Vencida</option>
                 <option value="Cancelada">Cancelada</option>
               </select>
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                O sistema altera automaticamente para Aguardando recebimento,
+                Paga ou Vencida. Use Cancelada apenas quando necessário.
+              </span>
             </label>
 
             <label className={rotulo}>
@@ -2490,6 +2601,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
                 defaultValue={
                   coleta.data_recebimento_pagamento_ads ?? ""
                 }
+                onChange={sincronizarStatusRecebimentoAds}
                 className={campo}
               />
             </label>
