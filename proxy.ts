@@ -1,15 +1,42 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import {
+  NextResponse,
+  type NextRequest,
+} from "next/server";
 
 export async function proxy(request: NextRequest) {
+  const caminho = request.nextUrl.pathname;
+
+  /*
+   * ==========================================================
+   * ROTAS PÚBLICAS
+   * ==========================================================
+   *
+   * Esta API precisa funcionar sem sessão porque é utilizada
+   * para localizar o e-mail correspondente ao nome de usuário
+   * antes do login no Supabase.
+   */
+  if (
+    caminho === "/api/login/usuario" ||
+    caminho.startsWith("/api/login/usuario/")
+  ) {
+    return NextResponse.next();
+  }
+
   let resposta = NextResponse.next({
     request,
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+
   const supabasePublishableKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+  /*
+   * Se as variáveis não estiverem configuradas,
+   * deixa a requisição continuar.
+   */
   if (!supabaseUrl || !supabasePublishableKey) {
     return resposta;
   }
@@ -24,9 +51,11 @@ export async function proxy(request: NextRequest) {
         },
 
         setAll(cookiesParaDefinir) {
-          cookiesParaDefinir.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
+          cookiesParaDefinir.forEach(
+            ({ name, value }) => {
+              request.cookies.set(name, value);
+            },
+          );
 
           resposta = NextResponse.next({
             request,
@@ -34,7 +63,11 @@ export async function proxy(request: NextRequest) {
 
           cookiesParaDefinir.forEach(
             ({ name, value, options }) => {
-              resposta.cookies.set(name, value, options);
+              resposta.cookies.set(
+                name,
+                value,
+                options,
+              );
             },
           );
         },
@@ -43,26 +76,55 @@ export async function proxy(request: NextRequest) {
   );
 
   /*
-   * Não coloque código entre a criação do cliente e getUser().
-   * Essa chamada valida e renova a sessão quando necessário.
+   * Valida e renova a sessão do usuário.
    */
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const caminho = request.nextUrl.pathname;
-  const paginaLogin = caminho === "/login";
+  const paginaLogin =
+    caminho === "/login" ||
+    caminho === "/login/";
 
-  if (!user && !paginaLogin) {
+  /*
+   * ==========================================================
+   * USUÁRIO NÃO LOGADO
+   * ==========================================================
+   */
+  if (!user) {
+    /*
+     * Permite acessar normalmente a página de login.
+     */
+    if (paginaLogin) {
+      return resposta;
+    }
+
+    /*
+     * Qualquer outra página protegida manda para o login.
+     */
     const urlLogin = request.nextUrl.clone();
+
     urlLogin.pathname = "/login";
-    urlLogin.searchParams.set("retorno", caminho);
+
+    urlLogin.searchParams.set(
+      "retorno",
+      caminho,
+    );
 
     return NextResponse.redirect(urlLogin);
   }
 
+  /*
+   * ==========================================================
+   * USUÁRIO LOGADO
+   * ==========================================================
+   *
+   * Se já estiver autenticado e tentar acessar /login,
+   * retorna ao painel principal.
+   */
   if (user && paginaLogin) {
     const urlInicio = request.nextUrl.clone();
+
     urlInicio.pathname = "/";
     urlInicio.search = "";
 

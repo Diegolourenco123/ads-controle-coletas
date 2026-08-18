@@ -15,6 +15,7 @@ type Perfil =
 type Usuario = {
   user_id: string;
   nome: string;
+  usuario: string | null;
   email: string;
   perfil: Perfil;
   ativo: boolean;
@@ -106,12 +107,16 @@ export default function UsuariosPage() {
   const [criando, setCriando] = useState(false);
 
   const [nome, setNome] = useState("");
+  const [usuarioAcesso, setUsuarioAcesso] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [perfil, setPerfil] = useState<Perfil>("operacional");
 
   const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
   const [nomeEdicao, setNomeEdicao] = useState("");
+  const [usuarioEdicao, setUsuarioEdicao] = useState("");
+  const [emailEdicao, setEmailEdicao] = useState("");
+  const [senhaEdicao, setSenhaEdicao] = useState("");
   const [perfilEdicao, setPerfilEdicao] = useState<Perfil>("consulta");
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
@@ -176,6 +181,7 @@ export default function UsuariosPage() {
     return usuarios.filter((usuario) =>
       [
         usuario.nome,
+        usuario.usuario ?? "",
         usuario.email,
         nomePerfil(usuario.perfil),
       ]
@@ -187,6 +193,7 @@ export default function UsuariosPage() {
 
   function limparFormularioNovo() {
     setNome("");
+    setUsuarioAcesso("");
     setEmail("");
     setSenha("");
     setPerfil("operacional");
@@ -210,6 +217,7 @@ export default function UsuariosPage() {
         },
         body: JSON.stringify({
           nome,
+          usuario: usuarioAcesso,
           email,
           senha,
           perfil,
@@ -242,6 +250,9 @@ export default function UsuariosPage() {
   function abrirEdicao(usuario: Usuario) {
     setUsuarioEditando(usuario);
     setNomeEdicao(usuario.nome);
+    setUsuarioEdicao(usuario.usuario ?? "");
+    setEmailEdicao(usuario.email);
+    setSenhaEdicao("");
     setPerfilEdicao(usuario.perfil);
     setErro("");
     setMensagem("");
@@ -268,6 +279,9 @@ export default function UsuariosPage() {
         body: JSON.stringify({
           user_id: usuarioEditando.user_id,
           nome: nomeEdicao,
+          usuario: usuarioEdicao,
+          email: emailEdicao,
+          senha: senhaEdicao || undefined,
           perfil: perfilEdicao,
         }),
       });
@@ -344,6 +358,52 @@ export default function UsuariosPage() {
         error instanceof Error
           ? error.message
           : "Não foi possível alterar o status.",
+      );
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
+  async function excluirUsuario(usuario: Usuario) {
+    const confirmou = window.confirm(
+      `ATENÇÃO: deseja excluir permanentemente o usuário ${usuario.nome}?\n\nEssa ação removerá o acesso do usuário e não poderá ser desfeita.`,
+    );
+
+    if (!confirmou) return;
+
+    setProcessandoId(usuario.user_id);
+    setErro("");
+    setMensagem("");
+
+    try {
+      const token = await tokenAtual();
+
+      const resposta = await fetch("/api/usuarios", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: usuario.user_id,
+        }),
+      });
+
+      const dados = await resposta.json();
+
+      if (!resposta.ok) {
+        throw new Error(
+          dados.erro ?? "Não foi possível excluir o usuário.",
+        );
+      }
+
+      setMensagem("Usuário excluído com sucesso.");
+      await carregarUsuarios();
+    } catch (error) {
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o usuário.",
       );
     } finally {
       setProcessandoId(null);
@@ -447,7 +507,7 @@ export default function UsuariosPage() {
                 type="search"
                 value={pesquisa}
                 onChange={(evento) => setPesquisa(evento.target.value)}
-                placeholder="Pesquisar nome, e-mail ou perfil..."
+                placeholder="Pesquisar nome, usuário, e-mail ou perfil..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white md:w-80"
               />
             </div>
@@ -496,6 +556,11 @@ export default function UsuariosPage() {
                               <p className="font-bold text-slate-900">
                                 {usuario.nome}
                               </p>
+                              {usuario.usuario && (
+                                <p className="mt-0.5 text-xs font-semibold text-emerald-700">
+                                  @{usuario.usuario}
+                                </p>
+                              )}
                               <p className="mt-0.5 text-xs text-slate-500">
                                 {usuario.email}
                               </p>
@@ -559,6 +624,17 @@ export default function UsuariosPage() {
                                   ? "Desativar"
                                   : "Reativar"}
                             </button>
+
+                            <button
+                              type="button"
+                              onClick={() => excluirUsuario(usuario)}
+                              disabled={processandoId === usuario.user_id}
+                              className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {processandoId === usuario.user_id
+                                ? "Processando..."
+                                : "Excluir"}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -612,6 +688,26 @@ export default function UsuariosPage() {
                   placeholder="Nome do usuário"
                   className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                 />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Usuário de acesso
+                <input
+                  type="text"
+                  required
+                  value={usuarioAcesso}
+                  onChange={(evento) =>
+                    setUsuarioAcesso(
+                      evento.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""),
+                    )
+                  }
+                  placeholder="Ex.: diego"
+                  autoComplete="username"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                />
+                <span className="mt-1 block text-xs font-normal text-slate-400">
+                  Use letras, números, ponto, hífen ou sublinhado.
+                </span>
               </label>
 
               <label className="text-sm font-semibold text-slate-700">
@@ -711,8 +807,8 @@ export default function UsuariosPage() {
               </button>
             </div>
 
-            <div className="space-y-4 p-6">
-              <label className="block text-sm font-semibold text-slate-700">
+            <div className="grid gap-4 p-6 md:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-700 md:col-span-2">
                 Nome
                 <input
                   type="text"
@@ -724,6 +820,49 @@ export default function UsuariosPage() {
               </label>
 
               <label className="block text-sm font-semibold text-slate-700">
+                Usuário de acesso
+                <input
+                  type="text"
+                  required
+                  value={usuarioEdicao}
+                  onChange={(evento) =>
+                    setUsuarioEdicao(
+                      evento.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""),
+                    )
+                  }
+                  placeholder="Ex.: diego"
+                  autoComplete="username"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                E-mail
+                <input
+                  type="email"
+                  required
+                  value={emailEdicao}
+                  onChange={(evento) => setEmailEdicao(evento.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                Nova senha
+                <input
+                  type="password"
+                  minLength={6}
+                  value={senhaEdicao}
+                  onChange={(evento) => setSenhaEdicao(evento.target.value)}
+                  placeholder="Deixe em branco para manter"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                />
+                <span className="mt-1 block text-xs font-normal text-slate-400">
+                  Preencha somente se quiser alterar a senha.
+                </span>
+              </label>
+
+              <label className="block text-sm font-semibold text-slate-700 md:col-span-2">
                 Perfil de acesso
                 <select
                   value={perfilEdicao}

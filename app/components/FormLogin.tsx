@@ -7,11 +7,42 @@ import { criarClienteSupabaseBrowser } from "../lib/supabase-browser";
 export default function FormLogin() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [entrando, setEntrando] = useState(false);
   const [erro, setErro] = useState("");
+
+  async function resolverEmail(valor: string) {
+    const identificadorLimpo = valor.trim().toLowerCase();
+
+    // Se já digitou um e-mail, não precisamos consultar a API.
+    if (identificadorLimpo.includes("@")) {
+      return identificadorLimpo;
+    }
+
+    const resposta = await fetch("/api/login/usuario", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        usuario: identificadorLimpo,
+      }),
+    });
+
+    const dados = await resposta.json();
+
+    if (!resposta.ok) {
+      throw new Error(
+        dados.erro ?? "Usuário ou senha incorretos.",
+      );
+    }
+
+    return String(dados.email ?? "")
+      .trim()
+      .toLowerCase();
+  }
 
   async function entrar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -19,28 +50,41 @@ export default function FormLogin() {
     setEntrando(true);
     setErro("");
 
-    const supabase = criarClienteSupabaseBrowser();
+    try {
+      const emailResolvido = await resolverEmail(identificador);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: senha,
-    });
+      if (!emailResolvido) {
+        throw new Error("Usuário ou senha incorretos.");
+      }
 
-    if (error) {
-      console.error("Erro no login:", error);
+      const supabase = criarClienteSupabaseBrowser();
 
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailResolvido,
+        password: senha,
+      });
+
+      if (error) {
+        console.error("Erro no login:", error);
+
+        throw new Error(
+          error.message === "Invalid login credentials"
+            ? "Usuário/e-mail ou senha incorretos."
+            : `Não foi possível entrar: ${error.message}`,
+        );
+      }
+
+      router.replace("/");
+      router.refresh();
+    } catch (error) {
       setErro(
-        error.message === "Invalid login credentials"
-          ? "E-mail ou senha incorretos."
-          : `Não foi possível entrar: ${error.message}`,
+        error instanceof Error
+          ? error.message
+          : "Não foi possível entrar no sistema.",
       );
 
       setEntrando(false);
-      return;
     }
-
-    router.replace("/");
-    router.refresh();
   }
 
   return (
@@ -55,14 +99,14 @@ export default function FormLogin() {
       )}
 
       <label className="block text-sm font-semibold text-slate-700">
-        E-mail
+        Usuário ou e-mail
         <input
-          type="email"
-          value={email}
-          onChange={(evento) => setEmail(evento.target.value)}
+          type="text"
+          value={identificador}
+          onChange={(evento) => setIdentificador(evento.target.value)}
           required
-          autoComplete="email"
-          placeholder="seuemail@empresa.com.br"
+          autoComplete="username"
+          placeholder="diego ou seuemail@empresa.com.br"
           className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
         />
       </label>
@@ -99,8 +143,7 @@ export default function FormLogin() {
       </button>
 
       <p className="text-center text-xs leading-5 text-slate-500">
-        Utilize o e-mail e a senha cadastrados no Supabase
-        Authentication.
+        Utilize seu usuário ou e-mail e a senha cadastrada no sistema.
       </p>
     </form>
   );
