@@ -434,6 +434,8 @@ const nomesIndicadores: Record<string, string> = {
   "nf-ads-aguardando": "Aguardando recebimento",
   "nf-ads-pagas": "NFs pagas",
   "nf-ads-vencidas": "NFs vencidas",
+  "nf-ads-a-faturar": "A faturar",
+  "nf-ads-em-aberto": "Total a receber",
 };
 
 function pertenceAoIndicador(
@@ -467,19 +469,26 @@ function pertenceAoIndicador(
     coleta.status_recebimento_ads,
   );
 
-  const nfAdsEmitida =
-    Boolean(coleta.numero_nf_cobranca_ads) ||
-    Boolean(coleta.data_emissao_nf_cobranca_ads) ||
-    statusAds === "emitida" ||
-    statusAds === "aguardando recebimento" ||
-    statusAds === "paga" ||
-    statusAds === "vencida";
+  // Mesmas regras usadas no Dashboard Financeiro.
+  const nfAdsEmitida = Boolean(
+    coleta.numero_nf_cobranca_ads?.trim(),
+  );
 
-  const nfAdsPaga = statusAds === "paga";
+  const nfAdsPaga =
+    statusAds === "paga" ||
+    Boolean(coleta.data_recebimento_pagamento_ads);
+
+  const nfAdsCancelada = statusAds === "cancelada";
 
   const nfAdsVencida =
+    nfAdsEmitida &&
     !nfAdsPaga &&
+    !nfAdsCancelada &&
     dataVencida(coleta.vencimento_nf_cobranca_ads);
+
+  const ehColetaAds =
+    normalizarTexto(coleta.transportadora) ===
+    "ads logistica ambiental";
 
   switch (indicador) {
     case "aguardando-nf":
@@ -524,7 +533,17 @@ function pertenceAoIndicador(
         nfAdsEmitida &&
         !nfAdsPaga &&
         !nfAdsVencida &&
-        statusAds !== "cancelada"
+        !nfAdsCancelada
+      );
+
+    case "nf-ads-a-faturar":
+      return ehColetaAds && !nfAdsEmitida;
+
+    case "nf-ads-em-aberto":
+      return (
+        nfAdsEmitida &&
+        !nfAdsPaga &&
+        !nfAdsCancelada
       );
 
     default:
@@ -534,7 +553,20 @@ function pertenceAoIndicador(
 
 function TodasAsColetasContent() {
   const searchParams = useSearchParams();
-  const indicador = searchParams.get("indicador") ?? "";
+  const indicadorUrl = searchParams.get("indicador") ?? "";
+  const financeiroAds = searchParams.get("financeiroAds") ?? "";
+
+  const mapaFinanceiroAds: Record<string, string> = {
+    emitidas: "nf-ads-emitidas",
+    pagas: "nf-ads-pagas",
+    aguardando: "nf-ads-aguardando",
+    vencidas: "nf-ads-vencidas",
+    "a-faturar": "nf-ads-a-faturar",
+    "em-aberto": "nf-ads-em-aberto",
+  };
+
+  const indicador =
+    indicadorUrl || mapaFinanceiroAds[financeiroAds] || "";
 
   const [coletas, setColetas] = useState<Coleta[]>([]);
   const [pesquisa, setPesquisa] = useState("");
@@ -628,8 +660,11 @@ function TodasAsColetasContent() {
         .select(
           "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, numero_nf, data_nf, transportadora, data_envio_transportadora, data_prevista_coleta, data_coleta, data_efetiva_coleta, data_chegada_ads, status, created_at, conhecimento, valor_frete, vencimento_transportadora, status_pagamento_transportadora, data_pagamento_transportadora, situacao_pagamento_transportadora, numero_nf_cobranca_ads, data_emissao_nf_cobranca_ads, valor_nf_cobranca_ads, vencimento_nf_cobranca_ads, status_recebimento_ads, data_recebimento_pagamento_ads, situacao_recebimento",
         )
-        .order("created_at", {
-          ascending: false,
+        // Ordem cronológica: solicitações mais antigas primeiro.
+        // Assim a tabela segue uma sequência natural de datas.
+        .order("data_solicitacao", {
+          ascending: true,
+          nullsFirst: false,
         });
 
       if (!componenteAtivo) {

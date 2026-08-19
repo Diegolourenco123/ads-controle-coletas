@@ -332,22 +332,26 @@ export default function DashboardExecutivo() {
         !nfAdsCancelada &&
         dataVencida(coleta.vencimento_nf_cobranca_ads);
 
-      if (ehColetaAds) {
-        if (!temNfAds) {
-          coletasAdsAFaturar += 1;
-        } else {
-          nfsAdsEmitidas += 1;
+      // "A faturar" mantém a regra original:
+      // considera apenas coletas realizadas pela própria ADS sem NF de cobrança.
+      if (ehColetaAds && !temNfAds) {
+        coletasAdsAFaturar += 1;
+      }
 
-          if (nfAdsPaga) {
-            nfsAdsPagas += 1;
-            valorAdsRecebido += valorAds;
-          } else if (nfAdsVencida) {
-            nfsAdsVencidas += 1;
-            valorAdsVencido += valorAds;
-          } else if (!nfAdsCancelada) {
-            nfsAdsPendentes += 1;
-            valorAdsPendente += valorAds;
-          }
+      // O Financeiro ADS deve considerar TODA NF de cobrança emitida pela ADS,
+      // independentemente da transportadora que realizou a coleta.
+      if (temNfAds) {
+        nfsAdsEmitidas += 1;
+
+        if (nfAdsPaga) {
+          nfsAdsPagas += 1;
+          valorAdsRecebido += valorAds;
+        } else if (nfAdsVencida) {
+          nfsAdsVencidas += 1;
+          valorAdsVencido += valorAds;
+        } else if (!nfAdsCancelada) {
+          nfsAdsPendentes += 1;
+          valorAdsPendente += valorAds;
         }
       }
     });
@@ -528,7 +532,7 @@ export default function DashboardExecutivo() {
             />
 
             <ResumoEscuro
-              titulo="A receber pela ADS"
+              titulo="A vencer"
               valor={formatarMoeda(resumo.valorAdsPendente)}
               carregando={carregando}
               classe="text-orange-300"
@@ -718,6 +722,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.nfsAdsEmitidas}
                   carregando={carregando}
                   tipo="neutro"
+                  href="/coletas?financeiroAds=emitidas"
                 />
 
                 <IndicadorFinanceiroAds
@@ -725,6 +730,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.nfsAdsPagas}
                   carregando={carregando}
                   tipo="positivo"
+                  href="/coletas?financeiroAds=pagas"
                 />
 
                 <IndicadorFinanceiroAds
@@ -732,6 +738,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.nfsAdsPendentes}
                   carregando={carregando}
                   tipo="pendente"
+                  href="/coletas?financeiroAds=aguardando"
                 />
 
                 <IndicadorFinanceiroAds
@@ -739,6 +746,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.nfsAdsVencidas}
                   carregando={carregando}
                   tipo="vencido"
+                  href="/coletas?financeiroAds=vencidas"
                 />
 
                 <IndicadorFinanceiroAds
@@ -746,6 +754,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.coletasAdsAFaturar}
                   carregando={carregando}
                   tipo="informativo"
+                  href="/coletas?financeiroAds=a-faturar"
                 />
               </div>
 
@@ -755,6 +764,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.valorAdsRecebido}
                   carregando={carregando}
                   tipo="positivo"
+                  href="/coletas?financeiroAds=pagas"
                 />
 
                 <Financeiro
@@ -762,6 +772,7 @@ export default function DashboardExecutivo() {
                   valor={resumo.valorAdsPendente}
                   carregando={carregando}
                   tipo="pendente"
+                  href="/coletas?financeiroAds=aguardando"
                 />
 
                 <Financeiro
@@ -769,6 +780,15 @@ export default function DashboardExecutivo() {
                   valor={resumo.valorAdsVencido}
                   carregando={carregando}
                   tipo="vencido"
+                  href="/coletas?financeiroAds=vencidas"
+                />
+
+                <Financeiro
+                  titulo="Total a receber"
+                  valor={resumo.valorAdsPendente + resumo.valorAdsVencido}
+                  carregando={carregando}
+                  tipo="total"
+                  href="/coletas?financeiroAds=em-aberto"
                 />
               </div>
             </div>
@@ -1274,11 +1294,13 @@ function Financeiro({
   valor,
   carregando,
   tipo,
+  href,
 }: {
   titulo: string;
   valor: number;
   carregando: boolean;
-  tipo: "positivo" | "pendente" | "vencido";
+  tipo: "positivo" | "pendente" | "vencido" | "total";
+  href?: string;
 }) {
   const classes =
     tipo === "positivo"
@@ -1295,16 +1317,29 @@ function Financeiro({
             ponto: "bg-red-500",
             valor: "text-red-900",
           }
-        : {
-            caixa: "border-orange-200 bg-orange-50/70",
-            titulo: "text-orange-800",
-            ponto: "bg-orange-500",
-            valor: "text-orange-900",
-          };
+        : tipo === "total"
+          ? {
+              caixa: "border-blue-200 bg-blue-50/70",
+              titulo: "text-blue-800",
+              ponto: "bg-blue-500",
+              valor: "text-blue-950",
+            }
+          : {
+              caixa: "border-orange-200 bg-orange-50/70",
+              titulo: "text-orange-800",
+              ponto: "bg-orange-500",
+              valor: "text-orange-900",
+            };
 
-  return (
+  const conteudo = (
     <div
-      className={`rounded-2xl border p-4 transition ${classes.caixa}`}
+      className={[
+        "rounded-2xl border p-4 transition",
+        classes.caixa,
+        href
+          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
+          : "",
+      ].join(" ")}
     >
       <div className="flex items-center justify-between gap-3">
         <p className={`text-xs font-semibold ${classes.titulo}`}>
@@ -1321,16 +1356,32 @@ function Financeiro({
           ? "..."
           : formatarMoeda(valor)}
       </p>
+
+      {href && (
+        <p className="mt-2 text-[10px] font-semibold text-slate-500">
+          Clique para ver os registros
+        </p>
+      )}
     </div>
   );
-}
 
+  if (!href) {
+    return conteudo;
+  }
+
+  return (
+    <Link href={href} className="block">
+      {conteudo}
+    </Link>
+  );
+}
 
 function IndicadorFinanceiroAds({
   titulo,
   valor,
   carregando,
   tipo,
+  href,
 }: {
   titulo: string;
   valor: number;
@@ -1341,6 +1392,7 @@ function IndicadorFinanceiroAds({
     | "pendente"
     | "vencido"
     | "informativo";
+  href?: string;
 }) {
   const classes =
     tipo === "positivo"
@@ -1378,9 +1430,15 @@ function IndicadorFinanceiroAds({
                 ponto: "bg-slate-500",
               };
 
-  return (
+  const conteudo = (
     <div
-      className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${classes.caixa}`}
+      className={[
+        "rounded-2xl border p-4 transition",
+        classes.caixa,
+        href
+          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
+          : "hover:-translate-y-0.5 hover:shadow-sm",
+      ].join(" ")}
     >
       <div className="flex items-center justify-between gap-3">
         <p className={`text-[11px] font-semibold ${classes.titulo}`}>
@@ -1393,7 +1451,23 @@ function IndicadorFinanceiroAds({
       <p className={`mt-3 text-2xl font-black tracking-tight ${classes.valor}`}>
         {carregando ? "..." : String(valor).padStart(2, "0")}
       </p>
+
+      {href && (
+        <p className="mt-2 text-[10px] font-semibold text-slate-500">
+          Ver registros
+        </p>
+      )}
     </div>
+  );
+
+  if (!href) {
+    return conteudo;
+  }
+
+  return (
+    <Link href={href} className="block">
+      {conteudo}
+    </Link>
   );
 }
 
