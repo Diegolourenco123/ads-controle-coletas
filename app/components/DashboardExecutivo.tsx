@@ -332,9 +332,23 @@ export default function DashboardExecutivo() {
         !nfAdsCancelada &&
         dataVencida(coleta.vencimento_nf_cobranca_ads);
 
-      // "A faturar" mantém a regra original:
-      // considera apenas coletas realizadas pela própria ADS sem NF de cobrança.
-      if (ehColetaAds && !temNfAds) {
+      // "A faturar": somente coletas realizadas pela própria ADS
+      // cuja operação física já foi concluída e que ainda não possuem
+      // NF de cobrança, não estejam pagas e nem canceladas.
+      const operacaoConcluida =
+        Boolean(dataEfetiva) ||
+        Boolean(coleta.data_chegada_ads) ||
+        status === "coleta realizada" ||
+        status === "recebido na ads" ||
+        status === "finalizado";
+
+      if (
+        ehColetaAds &&
+        operacaoConcluida &&
+        !temNfAds &&
+        !nfAdsPaga &&
+        !nfAdsCancelada
+      ) {
         coletasAdsAFaturar += 1;
       }
 

@@ -536,8 +536,25 @@ function pertenceAoIndicador(
         !nfAdsCancelada
       );
 
-    case "nf-ads-a-faturar":
-      return ehColetaAds && !nfAdsEmitida;
+    case "nf-ads-a-faturar": {
+      const dataEfetiva =
+        coleta.data_efetiva_coleta ?? coleta.data_coleta;
+
+      const operacaoConcluida =
+        Boolean(dataEfetiva) ||
+        Boolean(coleta.data_chegada_ads) ||
+        statusOperacional === "coleta realizada" ||
+        statusOperacional === "recebido na ads" ||
+        statusOperacional === "finalizado";
+
+      return (
+        ehColetaAds &&
+        operacaoConcluida &&
+        !nfAdsEmitida &&
+        !nfAdsPaga &&
+        !nfAdsCancelada
+      );
+    }
 
     case "nf-ads-em-aberto":
       return (

@@ -136,11 +136,27 @@ function coletaFinalizada(coleta: Coleta) {
     coleta.status_recebimento_ads,
   );
 
-  return (
+  /*
+   * A Central de Alertas não deve tratar como operação aberta
+   * uma coleta cuja etapa física já foi concluída.
+   *
+   * Isso evita que registros históricos já recebidos pela ADS
+   * continuem aparecendo como "Operação aberta há muitos dias".
+   */
+  const operacaoFisicaConcluida =
+    status === "coleta realizada" ||
+    status === "recebido na ads" ||
     status === "finalizado" ||
+    Boolean(coleta.data_chegada_ads);
+
+  const financeiroAdsConcluido =
     recebimentoAds === "paga" ||
-    Boolean(coleta.data_recebimento_pagamento_ads)
-  );
+    recebimentoAds === "pago" ||
+    recebimentoAds === "recebida" ||
+    recebimentoAds === "recebido" ||
+    Boolean(coleta.data_recebimento_pagamento_ads);
+
+  return operacaoFisicaConcluida || financeiroAdsConcluido;
 }
 
 function configurarPrioridade(prioridade: Prioridade) {
@@ -191,9 +207,7 @@ function gerarAlertas(coletas: Coleta[]) {
   const alertas: Alerta[] = [];
 
   coletas.forEach((coleta) => {
-    if (coletaFinalizada(coleta)) {
-      return;
-    }
+    const operacaoEncerrada = coletaFinalizada(coleta);
 
     const numeroOv =
       coleta.numero_ov || `Coleta #${coleta.id}`;
@@ -235,6 +249,7 @@ function gerarAlertas(coletas: Coleta[]) {
       coleta.vencimento_nf_cobranca_ads,
     );
 
+    if (!operacaoEncerrada) {
     if (
       diasParaColeta !== null &&
       diasParaColeta < 0 &&
@@ -329,6 +344,22 @@ function gerarAlertas(coletas: Coleta[]) {
         categoria: "Operação",
         dataReferencia: coleta.data_nf,
       });
+    }
+
+      if (diasOperacao >= 7) {
+        alertas.push({
+          id: `operacao-longa-${coleta.id}`,
+          coletaId: coleta.id,
+          numeroOv,
+          cliente,
+          localizacao,
+          titulo: "Operação aberta há muitos dias",
+          descricao: `A coleta permanece aberta há ${diasOperacao} dias.`,
+          prioridade: diasOperacao >= 15 ? "alta" : "media",
+          categoria: "Operação",
+          dataReferencia: coleta.data_solicitacao,
+        });
+      }
     }
 
     if (
@@ -441,20 +472,6 @@ function gerarAlertas(coletas: Coleta[]) {
       });
     }
 
-    if (diasOperacao >= 7) {
-      alertas.push({
-        id: `operacao-longa-${coleta.id}`,
-        coletaId: coleta.id,
-        numeroOv,
-        cliente,
-        localizacao,
-        titulo: "Operação aberta há muitos dias",
-        descricao: `A coleta permanece aberta há ${diasOperacao} dias.`,
-        prioridade: diasOperacao >= 15 ? "alta" : "media",
-        categoria: "Operação",
-        dataReferencia: coleta.data_solicitacao,
-      });
-    }
   });
 
   const ordemPrioridade: Record<Prioridade, number> = {
