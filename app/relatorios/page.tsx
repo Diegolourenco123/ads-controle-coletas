@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
@@ -70,7 +71,7 @@ function diasEntreDatas(dataInicial: string | null, dataFinal: string | null) {
 
   const diferenca = Math.round((fim - inicio) / 86_400_000);
 
-  return diferenca >= 0 ? diferenca : null;
+  return diferenca;
 }
 
 function formatarMoeda(valor: number | null | undefined) {
@@ -109,6 +110,10 @@ export default function RelatoriosPage() {
 
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(50);
+
+  const [pesquisaPagamento, setPesquisaPagamento] = useState("");
+  const [situacaoPagamento, setSituacaoPagamento] = useState("");
+  const [ordenacaoPagamento, setOrdenacaoPagamento] = useState("vencimento_desc");
 
   useEffect(() => {
     async function carregarColetas() {
@@ -308,7 +313,7 @@ export default function RelatoriosPage() {
       .filter((coleta) => {
         if (!coleta.data_solicitacao?.startsWith("2026-")) return false;
         if (
-          !coleta.data_emissao_nf_cobranca_ads ||
+          !coleta.vencimento_nf_cobranca_ads ||
           !coleta.data_recebimento_pagamento_ads
         ) {
           return false;
@@ -316,7 +321,7 @@ export default function RelatoriosPage() {
 
         return (
           diasEntreDatas(
-            coleta.data_emissao_nf_cobranca_ads,
+            coleta.vencimento_nf_cobranca_ads,
             coleta.data_recebimento_pagamento_ads,
           ) !== null
         );
@@ -325,34 +330,89 @@ export default function RelatoriosPage() {
         ...coleta,
         dias_pagamento:
           diasEntreDatas(
-            coleta.data_emissao_nf_cobranca_ads,
+            coleta.vencimento_nf_cobranca_ads,
             coleta.data_recebimento_pagamento_ads,
           ) ?? 0,
       }))
       .sort((a, b) =>
-        (b.data_emissao_nf_cobranca_ads ?? "").localeCompare(
-          a.data_emissao_nf_cobranca_ads ?? "",
+        (b.data_recebimento_pagamento_ads ?? "").localeCompare(
+          a.data_recebimento_pagamento_ads ?? "",
         ),
       );
   }, [coletas]);
+
+  const pagamentos2026Filtrados = useMemo(() => {
+    const termo = pesquisaPagamento.trim().toLowerCase();
+
+    return pagamentos2026
+      .filter((coleta) => {
+        const conteudo = [
+          coleta.loja,
+          coleta.numero_nf_cobranca_ads,
+          coleta.cidade,
+          coleta.estado,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        const correspondePesquisa = !termo || conteudo.includes(termo);
+
+        const correspondeSituacao =
+          !situacaoPagamento ||
+          (situacaoPagamento === "atrasado" && coleta.dias_pagamento > 0) ||
+          (situacaoPagamento === "no_prazo" && coleta.dias_pagamento === 0) ||
+          (situacaoPagamento === "antecipado" && coleta.dias_pagamento < 0);
+
+        return correspondePesquisa && correspondeSituacao;
+      })
+      .sort((a, b) => {
+        if (ordenacaoPagamento === "atraso_desc") {
+          return b.dias_pagamento - a.dias_pagamento;
+        }
+
+        if (ordenacaoPagamento === "atraso_asc") {
+          return a.dias_pagamento - b.dias_pagamento;
+        }
+
+        if (ordenacaoPagamento === "loja_asc") {
+          return (a.loja ?? "").localeCompare(b.loja ?? "", "pt-BR");
+        }
+
+        if (ordenacaoPagamento === "pagamento_desc") {
+          return (b.data_recebimento_pagamento_ads ?? "").localeCompare(
+            a.data_recebimento_pagamento_ads ?? "",
+          );
+        }
+
+        return (b.vencimento_nf_cobranca_ads ?? "").localeCompare(
+          a.vencimento_nf_cobranca_ads ?? "",
+        );
+      });
+  }, [
+    pagamentos2026,
+    pesquisaPagamento,
+    situacaoPagamento,
+    ordenacaoPagamento,
+  ]);
 
   const indicadoresPagamento2026 = useMemo(() => {
     if (pagamentos2026.length === 0) {
       return {
         quantidade: 0,
         media: 0,
-        menor: 0,
+        noPrazo: 0,
         maior: 0,
       };
     }
 
-    const prazos = pagamentos2026.map((item) => item.dias_pagamento);
+    const prazos = pagamentos2026.map((item) => Math.max(0, item.dias_pagamento));
     const soma = prazos.reduce((total, dias) => total + dias, 0);
 
     return {
       quantidade: pagamentos2026.length,
       media: soma / pagamentos2026.length,
-      menor: Math.min(...prazos),
+      noPrazo: pagamentos2026.filter((item) => item.dias_pagamento <= 0).length,
       maior: Math.max(...prazos),
     };
   }, [pagamentos2026]);
@@ -400,6 +460,65 @@ export default function RelatoriosPage() {
       }))
       .sort((a, b) => b.mediaDias - a.mediaDias);
   }, [pagamentos2026]);
+
+  const sla2026 = useMemo(() => {
+    const base = coletas.filter((coleta) =>
+      coleta.data_solicitacao?.startsWith("2026-"),
+    );
+
+    function calcularEtapa(
+      nome: string,
+      inicio: (coleta: Coleta) => string | null,
+      fim: (coleta: Coleta) => string | null,
+    ) {
+      const prazos = base
+        .map((coleta) => diasEntreDatas(inicio(coleta), fim(coleta)))
+        .filter((dias): dias is number => dias !== null && dias >= 0);
+
+      if (prazos.length === 0) {
+        return {
+          nome,
+          media: 0,
+          menor: 0,
+          maior: 0,
+          registros: 0,
+        };
+      }
+
+      const soma = prazos.reduce((total, dias) => total + dias, 0);
+
+      return {
+        nome,
+        media: soma / prazos.length,
+        menor: Math.min(...prazos),
+        maior: Math.max(...prazos),
+        registros: prazos.length,
+      };
+    }
+
+    return [
+      calcularEtapa(
+        "Solicitação → Coleta",
+        (coleta) => coleta.data_solicitacao,
+        (coleta) => coleta.data_coleta,
+      ),
+      calcularEtapa(
+        "Coleta → Chegada ADS",
+        (coleta) => coleta.data_coleta,
+        (coleta) => coleta.data_chegada_ads,
+      ),
+      calcularEtapa(
+        "Chegada ADS → Emissão NF ADS",
+        (coleta) => coleta.data_chegada_ads,
+        (coleta) => coleta.data_emissao_nf_cobranca_ads,
+      ),
+      calcularEtapa(
+        "Ciclo operacional total",
+        (coleta) => coleta.data_solicitacao,
+        (coleta) => coleta.data_chegada_ads,
+      ),
+    ];
+  }, [coletas]);
 
   const maiorStatus = Math.max(
     1,
@@ -506,23 +625,23 @@ export default function RelatoriosPage() {
       "Cidade",
       "UF",
       "NF de cobrança ADS",
-      "Data de emissão",
+      "Vencimento da NF",
       "Data do pagamento",
-      "Dias para pagamento",
+      "Dias após vencimento",
       "Valor da NF",
       "Status de recebimento",
       "Data da solicitação",
       "OV",
     ];
 
-    const linhas = pagamentos2026.map((coleta) => [
+    const linhas = pagamentos2026Filtrados.map((coleta) => [
       coleta.loja ?? "",
       coleta.cidade ?? "",
       coleta.estado ?? "",
       coleta.numero_nf_cobranca_ads ?? "",
-      formatarData(coleta.data_emissao_nf_cobranca_ads),
+      formatarData(coleta.vencimento_nf_cobranca_ads),
       formatarData(coleta.data_recebimento_pagamento_ads),
-      coleta.dias_pagamento,
+      Math.max(0, coleta.dias_pagamento),
       coleta.valor_nf_cobranca_ads ?? "",
       coleta.status_recebimento_ads ?? "",
       formatarData(coleta.data_solicitacao),
@@ -541,7 +660,7 @@ export default function RelatoriosPage() {
     const url = URL.createObjectURL(arquivo);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "prazo-pagamento-lojas-2026.csv";
+    link.download = "atraso-pagamento-lojas-2026.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -863,6 +982,133 @@ export default function RelatoriosPage() {
             </article>
           </section>
 
+          {/* INDICADORES DE SLA OPERACIONAL - 2026 */}
+          <section className="mb-5">
+            <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">
+                      Eficiência operacional
+                    </p>
+                  </div>
+
+                  <h3 className="mt-2 text-lg font-black text-slate-950">
+                    Indicadores de SLA — 2026
+                  </h3>
+
+                  <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-500">
+                    Tempo médio entre as principais etapas da operação. Somente
+                    coletas com solicitação em 2026 e com as duas datas necessárias
+                    preenchidas entram no cálculo de cada indicador.
+                  </p>
+                </div>
+
+                <Link
+                  href="/relatorios/sla"
+                  className="print:hidden inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 12h18" />
+                    <path d="m15 6 6 6-6 6" />
+                  </svg>
+                  Ver SLA por coleta
+                </Link>
+              </div>
+
+              <div className="grid gap-3 border-b border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-2 xl:grid-cols-4">
+                {sla2026.map((item) => (
+                  <div
+                    key={item.nome}
+                    className="rounded-xl border border-slate-200 bg-white p-4"
+                  >
+                    <p className="text-xs font-semibold text-slate-500">
+                      {item.nome}
+                    </p>
+
+                    <p className="mt-2 text-2xl font-black text-slate-900">
+                      {item.registros > 0
+                        ? `${item.media.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })} dias`
+                        : "—"}
+                    </p>
+
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {item.registros > 0
+                        ? `${item.registros} registro(s) analisado(s)`
+                        : "Sem dados completos para cálculo"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-5">
+                <div className="mb-4">
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Desempenho por etapa
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Compare a média, o menor e o maior prazo registrado em cada
+                    etapa do fluxo operacional.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[760px] text-left">
+                    <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">Etapa</th>
+                        <th className="px-4 py-3 text-right">Média</th>
+                        <th className="px-4 py-3 text-right">Menor tempo</th>
+                        <th className="px-4 py-3 text-right">Maior tempo</th>
+                        <th className="px-4 py-3 text-right">Registros</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {sla2026.map((item) => (
+                        <tr key={item.nome} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {item.nome}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black text-slate-900">
+                            {item.registros > 0
+                              ? `${item.media.toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })} dias`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {item.registros > 0 ? `${item.menor} dias` : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {item.registros > 0 ? `${item.maior} dias` : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-600">
+                            {item.registros}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </article>
+          </section>
+
           {/* PRAZO DE PAGAMENTO DAS LOJAS - 2026 */}
           <section className="mb-5">
             <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -876,13 +1122,13 @@ export default function RelatoriosPage() {
                   </div>
 
                   <h3 className="mt-2 text-lg font-black text-slate-950">
-                    Prazo de pagamento das lojas — 2026
+                    Atraso de pagamento das lojas — 2026
                   </h3>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Diferença entre a emissão da NF de cobrança ADS e a data
+                    Diferença entre o vencimento da NF de cobrança ADS e a data
                     efetiva do pagamento. Somente coletas com solicitação em
-                    2026 e com as duas datas preenchidas entram no cálculo.
+                    2026, vencimento e pagamento preenchidos entram no cálculo.
                   </p>
                 </div>
 
@@ -899,22 +1145,22 @@ export default function RelatoriosPage() {
               <div className="grid gap-3 border-b border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   [
-                    "Prazo médio",
+                    "Média após vencimento",
                     `${indicadoresPagamento2026.media.toLocaleString("pt-BR", {
                       minimumFractionDigits: 1,
                       maximumFractionDigits: 1,
                     })} dias`,
-                    "Média entre emissão e pagamento",
+                    "Média de dias após o vencimento",
                   ],
                   [
-                    "Menor prazo",
-                    `${indicadoresPagamento2026.menor} dias`,
-                    "Pagamento mais rápido",
+                    "Pagamentos no prazo",
+                    indicadoresPagamento2026.noPrazo,
+                    "Pagos no vencimento ou antecipados",
                   ],
                   [
-                    "Maior prazo",
+                    "Maior atraso",
                     `${indicadoresPagamento2026.maior} dias`,
-                    "Pagamento mais demorado",
+                    "Maior tempo após vencimento",
                   ],
                   [
                     "Notas analisadas",
@@ -939,6 +1185,68 @@ export default function RelatoriosPage() {
                 ))}
               </div>
 
+              <div className="border-b border-slate-200 bg-white p-5 print:hidden">
+                <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Filtros dos pagamentos
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Localize uma loja ou NF e organize a conferência financeira.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPesquisaPagamento("");
+                      setSituacaoPagamento("");
+                      setOrdenacaoPagamento("vencimento_desc");
+                    }}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
+                  >
+                    Limpar filtros
+                  </button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <input
+                    type="search"
+                    value={pesquisaPagamento}
+                    onChange={(evento) => setPesquisaPagamento(evento.target.value)}
+                    placeholder="Pesquisar loja, NF, cidade ou UF..."
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
+                  />
+
+                  <select
+                    value={situacaoPagamento}
+                    onChange={(evento) => setSituacaoPagamento(evento.target.value)}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
+                  >
+                    <option value="">Todas as situações</option>
+                    <option value="atrasado">Pago com atraso</option>
+                    <option value="no_prazo">Pago no vencimento</option>
+                    <option value="antecipado">Pago antecipado</option>
+                  </select>
+
+                  <select
+                    value={ordenacaoPagamento}
+                    onChange={(evento) => setOrdenacaoPagamento(evento.target.value)}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:bg-white"
+                  >
+                    <option value="vencimento_desc">Vencimento mais recente</option>
+                    <option value="pagamento_desc">Pagamento mais recente</option>
+                    <option value="atraso_desc">Maior atraso primeiro</option>
+                    <option value="atraso_asc">Menor atraso primeiro</option>
+                    <option value="loja_asc">Loja A → Z</option>
+                  </select>
+                </div>
+
+                <p className="mt-3 text-[11px] font-semibold text-slate-400">
+                  {pagamentos2026Filtrados.length} de {pagamentos2026.length} pagamento(s) exibido(s)
+                </p>
+              </div>
+
               <div className="grid xl:grid-cols-[0.95fr_1.55fr]">
                 <div className="border-b border-slate-200 p-5 xl:border-b-0 xl:border-r">
                   <div className="mb-4">
@@ -946,7 +1254,7 @@ export default function RelatoriosPage() {
                       Ranking por loja
                     </h4>
                     <p className="mt-1 text-xs text-slate-500">
-                      Da maior para a menor média de dias para pagamento.
+                      Da maior para a menor média de dias após o vencimento.
                     </p>
                   </div>
 
@@ -1024,26 +1332,26 @@ export default function RelatoriosPage() {
                         <tr>
                           <th className="px-4 py-3">Loja</th>
                           <th className="px-4 py-3">NF ADS</th>
-                          <th className="px-4 py-3">Emissão</th>
+                          <th className="px-4 py-3">Vencimento</th>
                           <th className="px-4 py-3">Pagamento</th>
-                          <th className="px-4 py-3 text-right">Prazo</th>
+                          <th className="px-4 py-3 text-right">Atraso</th>
                           <th className="px-4 py-3 text-right">Valor</th>
                         </tr>
                       </thead>
 
                       <tbody className="divide-y divide-slate-100 text-xs">
-                        {pagamentos2026.length === 0 ? (
+                        {pagamentos2026Filtrados.length === 0 ? (
                           <tr>
                             <td
                               colSpan={6}
                               className="px-4 py-8 text-center text-slate-400"
                             >
-                              Nenhuma NF paga de 2026 com emissão e pagamento
+                              Nenhuma NF paga de 2026 com vencimento e pagamento
                               preenchidos.
                             </td>
                           </tr>
                         ) : (
-                          pagamentos2026.map((coleta) => (
+                          pagamentos2026Filtrados.map((coleta) => (
                             <tr
                               key={coleta.id}
                               className="transition hover:bg-slate-50"
@@ -1065,7 +1373,7 @@ export default function RelatoriosPage() {
 
                               <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                                 {formatarData(
-                                  coleta.data_emissao_nf_cobranca_ads,
+                                  coleta.vencimento_nf_cobranca_ads,
                                 )}
                               </td>
 
@@ -1076,8 +1384,18 @@ export default function RelatoriosPage() {
                               </td>
 
                               <td className="whitespace-nowrap px-4 py-3 text-right">
-                                <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-700">
-                                  {coleta.dias_pagamento} dias
+                                <span
+                                  className={`inline-flex rounded-full px-2.5 py-1 font-black ${
+                                    coleta.dias_pagamento > 0
+                                      ? "bg-red-50 text-red-700"
+                                      : "bg-emerald-50 text-emerald-700"
+                                  }`}
+                                >
+                                  {coleta.dias_pagamento > 0
+                                    ? `${coleta.dias_pagamento} dias`
+                                    : coleta.dias_pagamento === 0
+                                      ? "No vencimento"
+                                      : `${Math.abs(coleta.dias_pagamento)} dias antes`}
                                 </span>
                               </td>
 

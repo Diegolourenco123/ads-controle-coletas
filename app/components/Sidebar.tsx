@@ -218,6 +218,25 @@ function IconeRelatorios({ className }: IconeProps) {
   );
 }
 
+function IconeAnalisePagamentos({ className }: IconeProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 3v18h18" />
+      <path d="m7 16 4-5 4 3 5-7" />
+      <path d="M18 7h2v2" />
+    </svg>
+  );
+}
+
 const todosPerfis: PerfilUsuario[] = [
   "administrador",
   "gestor_operacional",
@@ -230,6 +249,12 @@ const perfisOperacionais: PerfilUsuario[] = [
   "administrador",
   "gestor_operacional",
   "operacional",
+];
+
+const perfisAnaliseFinanceira: PerfilUsuario[] = [
+  "administrador",
+  "gestor_operacional",
+  "financeiro",
 ];
 
 const itensMenu: ItemMenu[] = [
@@ -292,6 +317,12 @@ const itensMenu: ItemMenu[] = [
     href: "/relatorios",
     icone: IconeRelatorios,
     perfis: todosPerfis,
+  },
+  {
+    nome: "Análise de Pagamentos",
+    href: "/analise-pagamentos",
+    icone: IconeAnalisePagamentos,
+    perfis: perfisAnaliseFinanceira,
   },
 ];
 
