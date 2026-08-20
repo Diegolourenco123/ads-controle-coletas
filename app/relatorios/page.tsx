@@ -24,6 +24,13 @@ type Coleta = {
   destino: string | null;
   status: string | null;
   observacoes: string | null;
+
+  numero_nf_cobranca_ads: string | null;
+  data_emissao_nf_cobranca_ads: string | null;
+  valor_nf_cobranca_ads: number | null;
+  vencimento_nf_cobranca_ads: string | null;
+  status_recebimento_ads: string | null;
+  data_recebimento_pagamento_ads: string | null;
 };
 
 function formatarData(data: string | null) {
@@ -31,6 +38,46 @@ function formatarData(data: string | null) {
   const valor = data.includes("T") ? data.split("T")[0] : data;
   const [ano, mes, dia] = valor.split("-");
   return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
+}
+
+function diasEntreDatas(dataInicial: string | null, dataFinal: string | null) {
+  if (!dataInicial || !dataFinal) return null;
+
+  const inicioTexto = dataInicial.includes("T")
+    ? dataInicial.split("T")[0]
+    : dataInicial;
+
+  const fimTexto = dataFinal.includes("T")
+    ? dataFinal.split("T")[0]
+    : dataFinal;
+
+  const [anoInicio, mesInicio, diaInicio] = inicioTexto.split("-").map(Number);
+  const [anoFim, mesFim, diaFim] = fimTexto.split("-").map(Number);
+
+  if (
+    !anoInicio ||
+    !mesInicio ||
+    !diaInicio ||
+    !anoFim ||
+    !mesFim ||
+    !diaFim
+  ) {
+    return null;
+  }
+
+  const inicio = Date.UTC(anoInicio, mesInicio - 1, diaInicio);
+  const fim = Date.UTC(anoFim, mesFim - 1, diaFim);
+
+  const diferenca = Math.round((fim - inicio) / 86_400_000);
+
+  return diferenca >= 0 ? diferenca : null;
+}
+
+function formatarMoeda(valor: number | null | undefined) {
+  return (valor ?? 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function escaparCsv(valor: unknown) {
@@ -71,7 +118,7 @@ export default function RelatoriosPage() {
       const { data, error } = await supabase
         .from("coletas")
         .select(
-          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, data_nf, numero_nf, transportadora, data_prevista_coleta, data_coleta, conhecimento, data_chegada_ads, peso, destino, status, observacoes",
+          "id, data_solicitacao, numero_ov, cliente, loja, cidade, estado, data_nf, numero_nf, transportadora, data_prevista_coleta, data_coleta, conhecimento, data_chegada_ads, peso, destino, status, observacoes, numero_nf_cobranca_ads, data_emissao_nf_cobranca_ads, valor_nf_cobranca_ads, vencimento_nf_cobranca_ads, status_recebimento_ads, data_recebimento_pagamento_ads",
         )
         .order("data_solicitacao", { ascending: false });
 
@@ -256,6 +303,104 @@ export default function RelatoriosPage() {
       });
   }, [coletasFiltradas]);
 
+  const pagamentos2026 = useMemo(() => {
+    return coletas
+      .filter((coleta) => {
+        if (!coleta.data_solicitacao?.startsWith("2026-")) return false;
+        if (
+          !coleta.data_emissao_nf_cobranca_ads ||
+          !coleta.data_recebimento_pagamento_ads
+        ) {
+          return false;
+        }
+
+        return (
+          diasEntreDatas(
+            coleta.data_emissao_nf_cobranca_ads,
+            coleta.data_recebimento_pagamento_ads,
+          ) !== null
+        );
+      })
+      .map((coleta) => ({
+        ...coleta,
+        dias_pagamento:
+          diasEntreDatas(
+            coleta.data_emissao_nf_cobranca_ads,
+            coleta.data_recebimento_pagamento_ads,
+          ) ?? 0,
+      }))
+      .sort((a, b) =>
+        (b.data_emissao_nf_cobranca_ads ?? "").localeCompare(
+          a.data_emissao_nf_cobranca_ads ?? "",
+        ),
+      );
+  }, [coletas]);
+
+  const indicadoresPagamento2026 = useMemo(() => {
+    if (pagamentos2026.length === 0) {
+      return {
+        quantidade: 0,
+        media: 0,
+        menor: 0,
+        maior: 0,
+      };
+    }
+
+    const prazos = pagamentos2026.map((item) => item.dias_pagamento);
+    const soma = prazos.reduce((total, dias) => total + dias, 0);
+
+    return {
+      quantidade: pagamentos2026.length,
+      media: soma / pagamentos2026.length,
+      menor: Math.min(...prazos),
+      maior: Math.max(...prazos),
+    };
+  }, [pagamentos2026]);
+
+  const rankingPagamentoLojas2026 = useMemo(() => {
+    const mapa = new Map<
+      string,
+      {
+        loja: string;
+        quantidade: number;
+        totalDias: number;
+        menorPrazo: number;
+        maiorPrazo: number;
+        valorPago: number;
+      }
+    >();
+
+    pagamentos2026.forEach((coleta) => {
+      const nomeLoja = coleta.loja?.trim() || "Unidade não informada";
+      const atual = mapa.get(nomeLoja);
+
+      if (!atual) {
+        mapa.set(nomeLoja, {
+          loja: nomeLoja,
+          quantidade: 1,
+          totalDias: coleta.dias_pagamento,
+          menorPrazo: coleta.dias_pagamento,
+          maiorPrazo: coleta.dias_pagamento,
+          valorPago: coleta.valor_nf_cobranca_ads ?? 0,
+        });
+        return;
+      }
+
+      atual.quantidade += 1;
+      atual.totalDias += coleta.dias_pagamento;
+      atual.menorPrazo = Math.min(atual.menorPrazo, coleta.dias_pagamento);
+      atual.maiorPrazo = Math.max(atual.maiorPrazo, coleta.dias_pagamento);
+      atual.valorPago += coleta.valor_nf_cobranca_ads ?? 0;
+    });
+
+    return [...mapa.values()]
+      .map((item) => ({
+        ...item,
+        mediaDias: item.totalDias / item.quantidade,
+      }))
+      .sort((a, b) => b.mediaDias - a.mediaDias);
+  }, [pagamentos2026]);
+
   const maiorStatus = Math.max(
     1,
     ...distribuicaoStatus.map((item) => item.valor),
@@ -349,6 +494,54 @@ export default function RelatoriosPage() {
     link.download = `relatorio-coletas-${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPagamentos2026Csv() {
+    const cabecalho = [
+      "Loja / Unidade",
+      "Cidade",
+      "UF",
+      "NF de cobrança ADS",
+      "Data de emissão",
+      "Data do pagamento",
+      "Dias para pagamento",
+      "Valor da NF",
+      "Status de recebimento",
+      "Data da solicitação",
+      "OV",
+    ];
+
+    const linhas = pagamentos2026.map((coleta) => [
+      coleta.loja ?? "",
+      coleta.cidade ?? "",
+      coleta.estado ?? "",
+      coleta.numero_nf_cobranca_ads ?? "",
+      formatarData(coleta.data_emissao_nf_cobranca_ads),
+      formatarData(coleta.data_recebimento_pagamento_ads),
+      coleta.dias_pagamento,
+      coleta.valor_nf_cobranca_ads ?? "",
+      coleta.status_recebimento_ads ?? "",
+      formatarData(coleta.data_solicitacao),
+      coleta.numero_ov ?? "",
+    ]);
+
+    const csv = [
+      cabecalho.map(escaparCsv).join(";"),
+      ...linhas.map((linha) => linha.map(escaparCsv).join(";")),
+    ].join("\n");
+
+    const arquivo = new Blob([`\uFEFF${csv}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(arquivo);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "prazo-pagamento-lojas-2026.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -666,6 +859,238 @@ export default function RelatoriosPage() {
                     </div>
                   ))
                 )}
+              </div>
+            </article>
+          </section>
+
+          {/* PRAZO DE PAGAMENTO DAS LOJAS - 2026 */}
+          <section className="mb-5">
+            <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">
+                      Financeiro ADS
+                    </p>
+                  </div>
+
+                  <h3 className="mt-2 text-lg font-black text-slate-950">
+                    Prazo de pagamento das lojas — 2026
+                  </h3>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Diferença entre a emissão da NF de cobrança ADS e a data
+                    efetiva do pagamento. Somente coletas com solicitação em
+                    2026 e com as duas datas preenchidas entram no cálculo.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={exportarPagamentos2026Csv}
+                  disabled={pagamentos2026.length === 0}
+                  className="print:hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Exportar pagamentos 2026
+                </button>
+              </div>
+
+              <div className="grid gap-3 border-b border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  [
+                    "Prazo médio",
+                    `${indicadoresPagamento2026.media.toLocaleString("pt-BR", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })} dias`,
+                    "Média entre emissão e pagamento",
+                  ],
+                  [
+                    "Menor prazo",
+                    `${indicadoresPagamento2026.menor} dias`,
+                    "Pagamento mais rápido",
+                  ],
+                  [
+                    "Maior prazo",
+                    `${indicadoresPagamento2026.maior} dias`,
+                    "Pagamento mais demorado",
+                  ],
+                  [
+                    "Notas analisadas",
+                    indicadoresPagamento2026.quantidade,
+                    "NF de cobrança ADS pagas",
+                  ],
+                ].map(([titulo, valor, detalhe]) => (
+                  <div
+                    key={String(titulo)}
+                    className="rounded-xl border border-slate-200 bg-white p-4"
+                  >
+                    <p className="text-xs font-semibold text-slate-500">
+                      {titulo}
+                    </p>
+                    <p className="mt-2 text-2xl font-black text-slate-900">
+                      {valor}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {detalhe}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid xl:grid-cols-[0.95fr_1.55fr]">
+                <div className="border-b border-slate-200 p-5 xl:border-b-0 xl:border-r">
+                  <div className="mb-4">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Ranking por loja
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Da maior para a menor média de dias para pagamento.
+                    </p>
+                  </div>
+
+                  <div className="max-h-[480px] overflow-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[560px] text-left">
+                      <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Loja</th>
+                          <th className="px-4 py-3 text-right">NF</th>
+                          <th className="px-4 py-3 text-right">Média</th>
+                          <th className="px-4 py-3 text-right">Menor</th>
+                          <th className="px-4 py-3 text-right">Maior</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {rankingPagamentoLojas2026.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={5}
+                              className="px-4 py-8 text-center text-slate-400"
+                            >
+                              Nenhum pagamento de 2026 com datas completas.
+                            </td>
+                          </tr>
+                        ) : (
+                          rankingPagamentoLojas2026.map((item) => (
+                            <tr key={item.loja} className="hover:bg-slate-50">
+                              <td className="px-4 py-3">
+                                <p className="font-bold text-slate-800">
+                                  {item.loja}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-slate-400">
+                                  {formatarMoeda(item.valorPago)} pagos
+                                </p>
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold text-slate-600">
+                                {item.quantidade}
+                              </td>
+                              <td className="px-4 py-3 text-right font-black text-slate-900">
+                                {item.mediaDias.toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })}{" "}
+                                dias
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-600">
+                                {item.menorPrazo} dias
+                              </td>
+                              <td className="px-4 py-3 text-right text-slate-600">
+                                {item.maiorPrazo} dias
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="p-5">
+                  <div className="mb-4">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Pagamento NF por NF
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Conferência individual de cada nota fiscal de cobrança
+                      ADS paga em 2026.
+                    </p>
+                  </div>
+
+                  <div className="max-h-[480px] overflow-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[920px] text-left">
+                      <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Loja</th>
+                          <th className="px-4 py-3">NF ADS</th>
+                          <th className="px-4 py-3">Emissão</th>
+                          <th className="px-4 py-3">Pagamento</th>
+                          <th className="px-4 py-3 text-right">Prazo</th>
+                          <th className="px-4 py-3 text-right">Valor</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {pagamentos2026.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="px-4 py-8 text-center text-slate-400"
+                            >
+                              Nenhuma NF paga de 2026 com emissão e pagamento
+                              preenchidos.
+                            </td>
+                          </tr>
+                        ) : (
+                          pagamentos2026.map((coleta) => (
+                            <tr
+                              key={coleta.id}
+                              className="transition hover:bg-slate-50"
+                            >
+                              <td className="px-4 py-3">
+                                <p className="font-bold text-slate-800">
+                                  {coleta.loja || "Unidade não informada"}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-slate-400">
+                                  {[coleta.cidade, coleta.estado]
+                                    .filter(Boolean)
+                                    .join("/") || "—"}
+                                </p>
+                              </td>
+
+                              <td className="whitespace-nowrap px-4 py-3 font-black text-emerald-700">
+                                {coleta.numero_nf_cobranca_ads || "—"}
+                              </td>
+
+                              <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                                {formatarData(
+                                  coleta.data_emissao_nf_cobranca_ads,
+                                )}
+                              </td>
+
+                              <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                                {formatarData(
+                                  coleta.data_recebimento_pagamento_ads,
+                                )}
+                              </td>
+
+                              <td className="whitespace-nowrap px-4 py-3 text-right">
+                                <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 font-black text-emerald-700">
+                                  {coleta.dias_pagamento} dias
+                                </span>
+                              </td>
+
+                              <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-slate-700">
+                                {formatarMoeda(coleta.valor_nf_cobranca_ads)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </article>
           </section>
