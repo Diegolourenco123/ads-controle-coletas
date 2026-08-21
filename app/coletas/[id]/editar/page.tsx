@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import {
+  useParams,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import Link from "next/link";
 
 import FormEditarColeta from "../../../components/FormEditarColeta";
 import Header from "../../../components/Header";
@@ -24,11 +29,38 @@ const perfisPermitidos: PerfilUsuario[] = [
 export default function EditarColetaPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const coletaId = Number(params.id);
 
   const [carregando, setCarregando] = useState(true);
   const [autorizado, setAutorizado] = useState(false);
+
+  /*
+   * ==========================================================
+   * ROTA DE RETORNO
+   * ==========================================================
+   *
+   * A tela "Todas as coletas" envia no parâmetro "voltar"
+   * a URL completa com os filtros utilizados anteriormente.
+   *
+   * Exemplo:
+   *
+   * /coletas?status=Aguardando%20NF
+   *
+   * ou:
+   *
+   * /coletas?status=Aguardando%20coleta&transportadora=Todo%20Brasil
+   *
+   * Caso a coleta seja aberta por outro lugar do sistema,
+   * o retorno padrão será /coletas.
+   */
+  const parametroVoltar = searchParams.get("voltar");
+
+  const voltarPara =
+    parametroVoltar?.startsWith("/coletas")
+      ? parametroVoltar
+      : "/coletas";
 
   useEffect(() => {
     let componenteAtivo = true;
@@ -136,6 +168,28 @@ export default function EditarColetaPage() {
 
         <section className="min-w-0 p-5 md:p-8">
           <div className="mb-7">
+            {/* BOTÃO VOLTAR */}
+            <Link
+              href={voltarPara}
+              className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+
+              Voltar para coletas
+            </Link>
+
             <p className="text-sm font-medium text-emerald-700">
               Controle operacional
             </p>
@@ -145,7 +199,8 @@ export default function EditarColetaPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Atualize o andamento, os documentos e as informações da coleta.
+              Atualize o andamento, os documentos e as
+              informações da coleta.
             </p>
           </div>
 

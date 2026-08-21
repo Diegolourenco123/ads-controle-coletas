@@ -154,27 +154,27 @@ function calcularStatusOperacional(dados: FormData) {
   const obterValor = (nome: string) =>
     dados.get(nome)?.toString().trim() ?? "";
 
-  const dataNotaFiscal =
-    obterValor("dataNotaFiscal");
-
-  const numeroNotaFiscal =
-    obterValor("numeroNotaFiscal");
-
-  const transportadora =
-    obterValor("transportadora");
-
-  const dataEnvioTransportadora =
-    obterValor("dataEnvioTransportadora");
-
-  const dataEfetivaColeta =
-    obterValor("dataEfetivaColeta");
-
-  const dataChegadaAds =
-    obterValor("dataChegadaAds");
+  const dataNotaFiscal = obterValor("dataNotaFiscal");
+  const numeroNotaFiscal = obterValor("numeroNotaFiscal");
+  const transportadora = obterValor("transportadora");
+  const dataPrevistaColeta = obterValor("dataPrevistaColeta");
+  const dataEfetivaColeta = obterValor("dataEfetivaColeta");
+  const dataChegadaAds = obterValor("dataChegadaAds");
 
   const statusRecebimentoAds = normalizarTexto(
     obterValor("statusRecebimentoAds"),
   );
+
+  /*
+   * REGRA ESPECIAL — COLETAS REALIZADAS PELA PRÓPRIA ADS
+   *
+   * Quando a transportadora for ADS Logística Ambiental e já existir
+   * uma data prevista de coleta, a operação pode avançar para
+   * "Aguardando coleta" mesmo sem NF do cliente.
+   */
+  const coletaRealizadaPelaAds =
+    normalizarTexto(transportadora) ===
+    normalizarTexto("ADS Logística Ambiental");
 
   if (statusRecebimentoAds === "paga") {
     return "Finalizado";
@@ -188,19 +188,11 @@ function calcularStatusOperacional(dados: FormData) {
     return "Coleta realizada";
   }
 
-  if (
-    dataNotaFiscal &&
-    numeroNotaFiscal &&
-    transportadora &&
-    dataEnvioTransportadora
-  ) {
+  if (coletaRealizadaPelaAds && dataPrevistaColeta) {
     return "Aguardando coleta";
   }
 
-  if (
-    dataNotaFiscal &&
-    numeroNotaFiscal
-  ) {
+  if (dataNotaFiscal && numeroNotaFiscal) {
     return "Aguardando coleta";
   }
 

@@ -1,5 +1,7 @@
 "use client";
 
+// VERSÃO: filtro agrupado TODO BRASIL - 21/08/2026
+
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -586,8 +588,15 @@ function TodasAsColetasContent() {
     indicadorUrl || mapaFinanceiroAds[financeiroAds] || "";
 
   const [coletas, setColetas] = useState<Coleta[]>([]);
-  const [pesquisa, setPesquisa] = useState("");
-  const [status, setStatus] = useState("");
+  const [pesquisa, setPesquisa] = useState(
+    () => searchParams.get("pesquisa") ?? "",
+  );
+  const [status, setStatus] = useState(
+    () => searchParams.get("status") ?? "",
+  );
+  const [transportadoraFiltro, setTransportadoraFiltro] = useState(
+    () => searchParams.get("transportadora") ?? "",
+  );
   const [carregando, setCarregando] =
     useState(true);
   const [erro, setErro] = useState("");
@@ -835,6 +844,52 @@ function TodasAsColetasContent() {
     setExcluindoId(null);
   }
 
+  const transportadorasDisponiveis = useMemo(() => {
+    return Array.from(
+      new Set(
+        coletas
+          .map((coleta) => coleta.transportadora?.trim())
+          .filter((item): item is string => Boolean(item)),
+      ),
+    ).sort((a, b) =>
+      a.localeCompare(b, "pt-BR", { sensitivity: "base" }),
+    );
+  }, [coletas]);
+
+  const urlRetorno = useMemo(() => {
+    const parametros = new URLSearchParams();
+
+    if (pesquisa.trim()) {
+      parametros.set("pesquisa", pesquisa.trim());
+    }
+
+    if (status) {
+      parametros.set("status", status);
+    }
+
+    if (transportadoraFiltro) {
+      parametros.set("transportadora", transportadoraFiltro);
+    }
+
+    if (indicador) {
+      parametros.set("indicador", indicador);
+    }
+
+    if (financeiroAds) {
+      parametros.set("financeiroAds", financeiroAds);
+    }
+
+    const query = parametros.toString();
+
+    return query ? `/coletas?${query}` : "/coletas";
+  }, [
+    pesquisa,
+    status,
+    transportadoraFiltro,
+    indicador,
+    financeiroAds,
+  ]);
+
   const coletasFiltradas = useMemo(() => {
     const termo = pesquisa.trim().toLowerCase();
 
@@ -847,6 +902,18 @@ function TodasAsColetasContent() {
 
       const correspondeStatus =
         !status || statusAtual === status;
+
+      const nomeTransportadora = normalizarTexto(
+        coleta.transportadora,
+      );
+
+      const filtroTodoBrasil =
+        transportadoraFiltro === "__todo_brasil__";
+
+      const correspondeTransportadora = filtroTodoBrasil
+        ? nomeTransportadora.includes("todo brasil")
+        : !transportadoraFiltro ||
+          coleta.transportadora?.trim() === transportadoraFiltro;
 
       const conteudo = [
         coleta.numero_ov,
@@ -868,9 +935,19 @@ function TodasAsColetasContent() {
       const correspondePesquisa =
         !termo || conteudo.includes(termo);
 
-      return correspondeStatus && correspondePesquisa;
+      return (
+        correspondeStatus &&
+        correspondeTransportadora &&
+        correspondePesquisa
+      );
     });
-  }, [coletas, pesquisa, status, indicador]);
+  }, [
+    coletas,
+    pesquisa,
+    status,
+    transportadoraFiltro,
+    indicador,
+  ]);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -960,10 +1037,17 @@ function TodasAsColetasContent() {
               <p className="mt-1 truncate text-sm font-bold text-blue-900">
                 {indicador
                   ? nomesIndicadores[indicador] ?? indicador
-                  : status ||
-                    (pesquisa
-                      ? `Busca: ${pesquisa}`
-                      : "Todos os registros")}
+                  : transportadoraFiltro === "__todo_brasil__" && status
+                    ? `Todo Brasil • ${status}`
+                    : transportadoraFiltro === "__todo_brasil__"
+                      ? "Todo Brasil"
+                      : transportadoraFiltro && status
+                        ? `${transportadoraFiltro} • ${status}`
+                        : status ||
+                          transportadoraFiltro ||
+                          (pesquisa
+                            ? `Busca: ${pesquisa}`
+                            : "Todos os registros")}
               </p>
             </div>
           </div>
@@ -973,7 +1057,7 @@ function TodasAsColetasContent() {
 
             {/* FILTROS */}
             <div className="border-b border-slate-200 bg-white p-5">
-              <div className="grid gap-3 md:grid-cols-[1fr_280px]">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px_280px]">
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
                     <IconePesquisar />
@@ -1010,6 +1094,24 @@ function TodasAsColetasContent() {
                   <option value="Aguardando pagamento do cliente">Aguardando pagamento do cliente</option>
                   <option value="NF vencida">NF vencida</option>
                   <option value="Finalizado">Finalizado</option>
+                </select>
+
+                <select
+                  value={transportadoraFiltro}
+                  onChange={(evento) =>
+                    setTransportadoraFiltro(evento.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+                >
+                  <option value="">Todas as transportadoras</option>
+                  <option value="__todo_brasil__">
+                    Todo Brasil
+                  </option>
+                  {transportadorasDisponiveis.map((transportadora) => (
+                    <option key={transportadora} value={transportadora}>
+                      {transportadora}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1174,7 +1276,9 @@ function TodasAsColetasContent() {
                               <div className="flex items-center gap-2">
                                 {podeEditarColeta ? (
                                   <Link
-                                    href={`/coletas/${coleta.id}`}
+                                    href={`/coletas/${coleta.id}?voltar=${encodeURIComponent(
+                                      urlRetorno,
+                                    )}`}
                                     className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
                                   >
                                     <IconeEditar />
