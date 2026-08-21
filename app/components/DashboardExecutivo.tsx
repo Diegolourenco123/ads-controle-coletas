@@ -412,15 +412,6 @@ export default function DashboardExecutivo() {
     };
   }, [coletas]);
 
-  const rankingClientes = useMemo(
-    () =>
-      criarRanking(
-        coletas,
-        (coleta) => coleta.cliente,
-      ),
-    [coletas],
-  );
-
   const rankingTransportadoras = useMemo(
     () =>
       criarRanking(
@@ -667,15 +658,25 @@ export default function DashboardExecutivo() {
         />
       </div>
 
-      {/* OPERAÇÃO + FINANCEIRO */}
-      <div className="grid gap-5 xl:grid-cols-2">
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
-          <CabecalhoSecao
-            categoria="Agenda operacional"
-            titulo="Próximas coletas"
-          />
+      {/* AGENDA + FINANCEIRO — VERSÃO COMPACTA */}
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
+          <div className="flex items-start justify-between gap-4">
+            <CabecalhoSecao
+              categoria="Agenda operacional"
+              titulo="Próximas coletas"
+            />
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Link
+              href="/agenda"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Ver agenda
+              <IconeSetaPainel className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-3">
             <AgendaItem
               titulo="Hoje"
               valor={resumo.previstasHoje}
@@ -694,138 +695,109 @@ export default function DashboardExecutivo() {
               carregando={carregando}
             />
           </div>
+
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                Situação atual
+              </p>
+              <p className="mt-1 text-xs font-semibold text-slate-700">
+                {resumo.atrasadas > 0
+                  ? `${resumo.atrasadas} ${
+                      resumo.atrasadas === 1 ? "coleta atrasada" : "coletas atrasadas"
+                    } exigindo atenção`
+                  : "Nenhuma coleta atrasada neste momento"}
+              </p>
+            </div>
+
+            <span
+              className={[
+                "h-2.5 w-2.5 shrink-0 rounded-full",
+                resumo.atrasadas > 0 ? "bg-red-500" : "bg-emerald-500",
+              ].join(" ")}
+            />
+          </div>
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/50">
-          <CabecalhoSecao
-            categoria="Resumo financeiro"
-            titulo="Pagamentos e recebimentos"
-          />
+        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/50">
+          <div className="flex items-start justify-between gap-4">
+            <CabecalhoSecao
+              categoria="Resumo financeiro"
+              titulo="Financeiro ADS"
+            />
 
-          <div className="mt-5 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Financeiro
-                titulo="Fretes pagos"
-                valor={resumo.valorFretesPagos}
-                carregando={carregando}
-                tipo="positivo"
-              />
+            <Link
+              href="/coletas?financeiroAds=em-aberto"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Ver financeiro
+              <IconeSetaPainel className="h-3.5 w-3.5" />
+            </Link>
+          </div>
 
-              <Financeiro
-                titulo="Fretes pendentes"
-                valor={resumo.valorFretesPendentes}
-                carregando={carregando}
-                tipo="pendente"
-              />
-            </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <Financeiro
+              titulo="Recebido pela ADS"
+              valor={resumo.valorAdsRecebido}
+              carregando={carregando}
+              tipo="positivo"
+              href="/coletas?financeiroAds=pagas"
+            />
 
-            <div>
-              <div className="mb-3">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                  Financeiro ADS
-                </p>
+            <Financeiro
+              titulo="Total a receber"
+              valor={resumo.valorAdsPendente + resumo.valorAdsVencido}
+              carregando={carregando}
+              tipo="total"
+              href="/coletas?financeiroAds=em-aberto"
+            />
 
-                <h4 className="mt-1 text-sm font-bold text-slate-900">
-                  Cobranças e recebimentos
-                </h4>
-              </div>
+            <Financeiro
+              titulo="Valor vencido"
+              valor={resumo.valorAdsVencido}
+              carregando={carregando}
+              tipo="vencido"
+              href="/coletas?financeiroAds=vencidas"
+            />
+          </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <IndicadorFinanceiroAds
-                  titulo="NFs emitidas"
-                  valor={resumo.nfsAdsEmitidas}
-                  carregando={carregando}
-                  tipo="neutro"
-                  href="/coletas?financeiroAds=emitidas"
-                />
-
-                <IndicadorFinanceiroAds
-                  titulo="Pagas"
-                  valor={resumo.nfsAdsPagas}
-                  carregando={carregando}
-                  tipo="positivo"
-                  href="/coletas?financeiroAds=pagas"
-                />
-
-                <IndicadorFinanceiroAds
-                  titulo="Aguardando"
-                  valor={resumo.nfsAdsPendentes}
-                  carregando={carregando}
-                  tipo="pendente"
-                  href="/coletas?financeiroAds=aguardando"
-                />
-
-                <IndicadorFinanceiroAds
-                  titulo="Vencidas"
-                  valor={resumo.nfsAdsVencidas}
-                  carregando={carregando}
-                  tipo="vencido"
-                  href="/coletas?financeiroAds=vencidas"
-                />
-
-                <IndicadorFinanceiroAds
-                  titulo="A faturar"
-                  valor={resumo.coletasAdsAFaturar}
-                  carregando={carregando}
-                  tipo="informativo"
-                  href="/coletas?financeiroAds=a-faturar"
-                />
-              </div>
-
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                <Financeiro
-                  titulo="Recebido pela ADS"
-                  valor={resumo.valorAdsRecebido}
-                  carregando={carregando}
-                  tipo="positivo"
-                  href="/coletas?financeiroAds=pagas"
-                />
-
-                <Financeiro
-                  titulo="A receber pela ADS"
-                  valor={resumo.valorAdsPendente}
-                  carregando={carregando}
-                  tipo="pendente"
-                  href="/coletas?financeiroAds=aguardando"
-                />
-
-                <Financeiro
-                  titulo="Valor vencido"
-                  valor={resumo.valorAdsVencido}
-                  carregando={carregando}
-                  tipo="vencido"
-                  href="/coletas?financeiroAds=vencidas"
-                />
-
-                <Financeiro
-                  titulo="Total a receber"
-                  valor={resumo.valorAdsPendente + resumo.valorAdsVencido}
-                  carregando={carregando}
-                  tipo="total"
-                  href="/coletas?financeiroAds=em-aberto"
-                />
-              </div>
-            </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <ResumoFinanceiroMini
+              titulo="Emitidas"
+              valor={resumo.nfsAdsEmitidas}
+              href="/coletas?financeiroAds=emitidas"
+            />
+            <ResumoFinanceiroMini
+              titulo="Pagas"
+              valor={resumo.nfsAdsPagas}
+              href="/coletas?financeiroAds=pagas"
+            />
+            <ResumoFinanceiroMini
+              titulo="Aguardando"
+              valor={resumo.nfsAdsPendentes}
+              href="/coletas?financeiroAds=aguardando"
+            />
+            <ResumoFinanceiroMini
+              titulo="Vencidas"
+              valor={resumo.nfsAdsVencidas}
+              href="/coletas?financeiroAds=vencidas"
+            />
+            <ResumoFinanceiroMini
+              titulo="A faturar"
+              valor={resumo.coletasAdsAFaturar}
+              href="/coletas?financeiroAds=a-faturar"
+            />
           </div>
         </article>
       </div>
 
-      {/* RANKINGS */}
-      <div className="grid gap-5 xl:grid-cols-2">
-        <RankingCard
-          titulo="Ranking de clientes"
-          subtitulo="Clientes com maior volume de coletas"
-          ranking={rankingClientes}
-          carregando={carregando}
-        />
-
-        <RankingCard
-          titulo="Ranking de transportadoras"
-          subtitulo="Transportadoras mais utilizadas"
-          ranking={rankingTransportadoras}
-          carregando={carregando}
-        />
-      </div>
+      {/* TRANSPORTADORAS — RANKING COMPACTO */}
+      <RankingCard
+        titulo="Transportadoras mais utilizadas"
+        subtitulo="Distribuição das coletas entre as principais transportadoras"
+        ranking={rankingTransportadoras}
+        carregando={carregando}
+      />
     </section>
   );
 }
@@ -1281,7 +1253,7 @@ function AgendaItem({
   carregando: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-blue-200 hover:bg-blue-50/60">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 transition hover:border-blue-200 hover:bg-blue-50/60">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-slate-500">
           {titulo}
@@ -1290,14 +1262,14 @@ function AgendaItem({
         <span className="h-2 w-2 rounded-full bg-blue-500" />
       </div>
 
-      <p className="mt-3 text-3xl font-black leading-none tracking-tight text-blue-900">
+      <p className="mt-2.5 text-2xl font-black leading-none tracking-tight text-blue-900">
         {carregando
           ? "..."
           : String(valor).padStart(2, "0")}
       </p>
 
-      <p className="mt-2 text-[11px] text-slate-400">
-        coletas previstas
+      <p className="mt-1.5 text-[10px] text-slate-400">
+        previstas
       </p>
     </div>
   );
@@ -1485,6 +1457,30 @@ function IndicadorFinanceiroAds({
   );
 }
 
+function ResumoFinanceiroMini({
+  titulo,
+  valor,
+  href,
+}: {
+  titulo: string;
+  valor: number;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition hover:border-blue-200 hover:bg-blue-50"
+    >
+      <span className="truncate text-[10px] font-semibold text-slate-500">
+        {titulo}
+      </span>
+      <span className="shrink-0 text-sm font-black text-slate-800">
+        {String(valor).padStart(2, "0")}
+      </span>
+    </Link>
+  );
+}
+
 function RankingCard({
   titulo,
   subtitulo,
@@ -1497,8 +1493,8 @@ function RankingCard({
   carregando: boolean;
 }) {
   return (
-    <article className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold tracking-tight text-slate-900">
             {titulo}
@@ -1515,59 +1511,57 @@ function RankingCard({
       </div>
 
       {carregando && (
-        <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
           Carregando ranking...
         </div>
       )}
 
       {!carregando && ranking.length === 0 && (
-        <div className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
           Nenhum dado disponível.
         </div>
       )}
 
       {!carregando && ranking.length > 0 && (
-        <div className="space-y-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {ranking.map((item, indice) => (
             <div
               key={item.nome}
-              className="rounded-xl p-1 transition hover:bg-slate-50"
+              className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 transition hover:border-emerald-200 hover:bg-emerald-50/40"
             >
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${
-                      indice === 0
-                        ? "bg-emerald-600 text-white"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {indice + 1}
-                  </span>
+              <div className="flex items-center justify-between gap-3">
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${
+                    indice === 0
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white text-slate-600 shadow-sm"
+                  }`}
+                >
+                  {indice + 1}
+                </span>
 
-                  <p className="truncate text-sm font-semibold text-slate-800">
-                    {item.nome}
-                  </p>
-                </div>
-
-                <p className="shrink-0 text-xs font-bold text-slate-600">
-                  <span className="text-emerald-700">
-                    {item.quantidade}
-                  </span>{" "}
-                  {item.quantidade === 1
-                    ? "coleta"
-                    : "coletas"}
-                </p>
+                <span className="shrink-0 text-xs font-black text-emerald-700">
+                  {item.quantidade}
+                </span>
               </div>
 
-              <div className="ml-10 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <p
+                className="mt-3 truncate text-xs font-bold text-slate-800"
+                title={item.nome}
+              >
+                {item.nome}
+              </p>
+
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200/70">
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-all duration-700"
-                  style={{
-                    width: `${item.percentual}%`,
-                  }}
+                  style={{ width: `${item.percentual}%` }}
                 />
               </div>
+
+              <p className="mt-2 text-[10px] text-slate-400">
+                {item.quantidade === 1 ? "1 coleta" : `${item.quantidade} coletas`}
+              </p>
             </div>
           ))}
         </div>
