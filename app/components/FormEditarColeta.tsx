@@ -513,6 +513,7 @@ export default function FormEditarColeta({ id }: { id: number }) {
   const [mensagem, setMensagem] = useState("");
   const [atualizarHistorico, setAtualizarHistorico] = useState(0);
   const [abrindoDocumento, setAbrindoDocumento] = useState<string | null>(null);
+  const [excluindoDocumento, setExcluindoDocumento] = useState<string | null>(null);
   const [tipoMensagem, setTipoMensagem] = useState<
     "sucesso" | "erro" | "carregando"
   >("sucesso");
@@ -884,6 +885,98 @@ export default function FormEditarColeta({ id }: { id: number }) {
 
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     setAbrindoDocumento(null);
+  }
+
+  async function excluirDocumento(
+    caminho: string | null,
+    campoBanco:
+      | "arquivo_nf_cliente"
+      | "arquivo_cte"
+      | "arquivo_nf_cobranca_ads",
+    identificador: string,
+    nomeDocumento: string,
+  ) {
+    if (!caminho) return;
+
+    const documentoFinanceiro =
+      campoBanco === "arquivo_nf_cobranca_ads";
+
+    const possuiPermissao = documentoFinanceiro
+      ? podeEditarFinanceiro
+      : podeEditarOperacao;
+
+    if (!possuiPermissao) {
+      setTipoMensagem("erro");
+      setMensagem(
+        "Seu perfil não possui permissão para excluir este documento.",
+      );
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Tem certeza que deseja excluir ${nomeDocumento}? Esta ação não poderá ser desfeita.`,
+    );
+
+    if (!confirmou) return;
+
+    setExcluindoDocumento(identificador);
+    setTipoMensagem("carregando");
+    setMensagem(`Excluindo ${nomeDocumento}...`);
+
+    const { data: coletaAtualizada, error: erroBanco } =
+      await supabase
+        .from("coletas")
+        .update({
+          [campoBanco]: null,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+
+    if (erroBanco || !coletaAtualizada) {
+      console.error(
+        "Erro ao remover referência do documento:",
+        erroBanco,
+      );
+
+      setTipoMensagem("erro");
+      setMensagem(
+        erroBanco
+          ? `Não foi possível excluir o documento: ${erroBanco.message}`
+          : "Não foi possível atualizar a coleta.",
+      );
+
+      setExcluindoDocumento(null);
+      return;
+    }
+
+    const { error: erroStorage } = await supabase.storage
+      .from(BUCKET_DOCUMENTOS)
+      .remove([caminho]);
+
+    setColeta(coletaAtualizada as Coleta);
+
+    if (erroStorage) {
+      console.warn(
+        "A referência foi removida, mas houve erro ao excluir o arquivo do Storage:",
+        erroStorage,
+      );
+
+      setTipoMensagem("erro");
+      setMensagem(
+        `${nomeDocumento} foi removido da coleta, mas não foi possível apagar o arquivo do armazenamento.`,
+      );
+
+      setExcluindoDocumento(null);
+      router.refresh();
+      return;
+    }
+
+    setTipoMensagem("sucesso");
+    setMensagem(`${nomeDocumento} excluído com sucesso!`);
+    setExcluindoDocumento(null);
+    setAtualizarHistorico((valor) => valor + 1);
+    router.refresh();
   }
 
   async function salvarAlteracoes(
@@ -2129,20 +2222,62 @@ export default function FormEditarColeta({ id }: { id: number }) {
               </span>
 
               {coleta.arquivo_nf_cliente && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    abrirDocumentoAtual(
-                      coleta.arquivo_nf_cliente,
-                      "nf-cliente",
-                    )
-                  }
-                  className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
-                >
-                  {abrindoDocumento === "nf-cliente"
-                    ? "Abrindo..."
-                    : "Abrir NF atual"}
-                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      abrirDocumentoAtual(
+                        coleta.arquivo_nf_cliente,
+                        "nf-cliente",
+                      )
+                    }
+                    disabled={abrindoDocumento === "nf-cliente"}
+                    className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {abrindoDocumento === "nf-cliente"
+                      ? "Abrindo..."
+                      : "Abrir NF atual"}
+                  </button>
+
+                  {podeEditarOperacao && (
+                    <button
+                      type="button"
+                      title="Excluir Nota Fiscal"
+                      onClick={() =>
+                        excluirDocumento(
+                          coleta.arquivo_nf_cliente,
+                          "arquivo_nf_cliente",
+                          "nf-cliente",
+                          "a Nota Fiscal do cliente",
+                        )
+                      }
+                      disabled={
+                        excluindoDocumento === "nf-cliente" || salvando
+                      }
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Excluir Nota Fiscal do cliente"
+                    >
+                      {excluindoDocumento === "nf-cliente" ? (
+                        <span className="text-xs">...</span>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5" />
+                          <path d="M14 11v5" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
             </label>
           </div>
@@ -2301,17 +2436,57 @@ export default function FormEditarColeta({ id }: { id: number }) {
               </span>
 
               {coleta.arquivo_cte && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    abrirDocumentoAtual(coleta.arquivo_cte, "cte")
-                  }
-                  className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 transition hover:bg-blue-100"
-                >
-                  {abrindoDocumento === "cte"
-                    ? "Abrindo..."
-                    : "Abrir CT-e atual"}
-                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      abrirDocumentoAtual(coleta.arquivo_cte, "cte")
+                    }
+                    disabled={abrindoDocumento === "cte"}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {abrindoDocumento === "cte"
+                      ? "Abrindo..."
+                      : "Abrir CT-e atual"}
+                  </button>
+
+                  {podeEditarOperacao && (
+                    <button
+                      type="button"
+                      title="Excluir CT-e"
+                      onClick={() =>
+                        excluirDocumento(
+                          coleta.arquivo_cte,
+                          "arquivo_cte",
+                          "cte",
+                          "o CT-e",
+                        )
+                      }
+                      disabled={excluindoDocumento === "cte" || salvando}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Excluir CT-e"
+                    >
+                      {excluindoDocumento === "cte" ? (
+                        <span className="text-xs">...</span>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5" />
+                          <path d="M14 11v5" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
             </label>
 
@@ -2527,20 +2702,60 @@ export default function FormEditarColeta({ id }: { id: number }) {
               </span>
 
               {coleta.arquivo_nf_cobranca_ads && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    abrirDocumentoAtual(
-                      coleta.arquivo_nf_cobranca_ads,
-                      "nf-ads",
-                    )
-                  }
-                  className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 transition hover:bg-violet-100"
-                >
-                  {abrindoDocumento === "nf-ads"
-                    ? "Abrindo..."
-                    : "Abrir NF atual"}
-                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      abrirDocumentoAtual(
+                        coleta.arquivo_nf_cobranca_ads,
+                        "nf-ads",
+                      )
+                    }
+                    disabled={abrindoDocumento === "nf-ads"}
+                    className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {abrindoDocumento === "nf-ads"
+                      ? "Abrindo..."
+                      : "Abrir NF atual"}
+                  </button>
+
+                  {podeEditarFinanceiro && (
+                    <button
+                      type="button"
+                      title="Excluir NF de cobrança ADS"
+                      onClick={() =>
+                        excluirDocumento(
+                          coleta.arquivo_nf_cobranca_ads,
+                          "arquivo_nf_cobranca_ads",
+                          "nf-ads",
+                          "a NF de cobrança ADS",
+                        )
+                      }
+                      disabled={excluindoDocumento === "nf-ads" || salvando}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Excluir NF de cobrança ADS"
+                    >
+                      {excluindoDocumento === "nf-ads" ? (
+                        <span className="text-xs">...</span>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="h-4 w-4"
+                          aria-hidden="true"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5" />
+                          <path d="M14 11v5" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
             </label>
 
