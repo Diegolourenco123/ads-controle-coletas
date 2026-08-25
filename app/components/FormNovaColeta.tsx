@@ -46,6 +46,51 @@ type TransportadoraMestre = {
   email: string | null;
 };
 
+type MunicipioTodoBrasil = {
+  regiao: string;
+  uf: string;
+  municipio: string;
+  classificacao: string;
+  ativo: boolean;
+};
+
+type TarifaTodoBrasil = {
+  regiao: string;
+  uf: string;
+  localidade: string;
+  frete_ate_30: number;
+  frete_30_50: number;
+  frete_50_70: number;
+  frete_70_100: number;
+  valor_kg_excedente: number;
+  ad_valorem_percentual: number;
+  gris_percentual: number;
+  pedagio_fracao_100kg: number;
+  taxa_despacho: number;
+  prazo_minimo_dias: number;
+  prazo_maximo_dias: number;
+  vigencia_inicio: string | null;
+  vigencia_fim: string | null;
+  ativo: boolean;
+};
+
+type DetalhesFrete = {
+  classificacao: string;
+  fretePeso: number;
+  pedagio: number;
+  taxaDespacho: number;
+  adValoremPercentual: number;
+  adValorem: number;
+  grisPercentual: number;
+  gris: number;
+  subtotal: number;
+  icmsPercentual: number;
+  valorIcms: number;
+  total: number;
+  prazoMinimo: number;
+  prazoMaximo: number;
+};
+
 const campo =
   "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400";
 
@@ -288,6 +333,24 @@ export default function FormNovaColeta() {
 
   const [salvando, setSalvando] =
     useState(false);
+
+  const [pesoInformado, setPesoInformado] =
+    useState("");
+
+  const [valorNotaFiscal, setValorNotaFiscal] =
+    useState("");
+
+  const [valorFreteAutomatico, setValorFreteAutomatico] =
+    useState("");
+
+  const [calculandoFrete, setCalculandoFrete] =
+    useState(false);
+
+  const [erroCalculoFrete, setErroCalculoFrete] =
+    useState("");
+
+  const [detalhesFrete, setDetalhesFrete] =
+    useState<DetalhesFrete | null>(null);
 
   useEffect(() => {
     async function carregarCadastrosMestres() {
@@ -817,6 +880,247 @@ export default function FormNovaColeta() {
     );
   }
 
+  function transportadoraUsaTabelaTodoBrasil(nome: string) {
+    const nomeNormalizado = normalizarTexto(nome);
+
+    return (
+      nomeNormalizado.includes("todo brasil") ||
+      nomeNormalizado.includes("todobrasil")
+    );
+  }
+
+  function arredondarMoeda(valor: number) {
+    return Math.round((valor + Number.EPSILON) * 100) / 100;
+  }
+
+  async function calcularFreteTodoBrasil() {
+    const cidade = unidadeSelecionada?.cidade?.trim() ?? "";
+    const uf = unidadeSelecionada?.estado?.trim().toUpperCase() ?? "";
+    const nomeTransportadora =
+      transportadoraSelecionada?.nome ?? buscaTransportadora;
+    const peso = Number(pesoInformado.replace(",", "."));
+    const valorNf = Number(valorNotaFiscal.replace(",", "."));
+
+    if (!transportadoraUsaTabelaTodoBrasil(nomeTransportadora)) {
+      setErroCalculoFrete("");
+      setDetalhesFrete(null);
+      setValorFreteAutomatico("");
+      return;
+    }
+
+    if (
+      !cidade ||
+      !uf ||
+      !pesoInformado ||
+      !Number.isFinite(peso) ||
+      peso <= 0 ||
+      !valorNotaFiscal ||
+      !Number.isFinite(valorNf) ||
+      valorNf < 0
+    ) {
+      setErroCalculoFrete("");
+      setDetalhesFrete(null);
+      setValorFreteAutomatico("");
+      return;
+    }
+
+    setCalculandoFrete(true);
+    setErroCalculoFrete("");
+
+    try {
+      const { data: municipios, error: erroMunicipio } =
+        await supabase
+          .from("municipios_todo_brasil")
+          .select("regiao, uf, municipio, classificacao, ativo")
+          .eq("uf", uf)
+          .eq("ativo", true);
+
+      if (erroMunicipio) {
+        throw new Error(
+          `Erro ao consultar município: ${erroMunicipio.message}`,
+        );
+      }
+
+      const cidadeNormalizada = normalizarTexto(cidade)
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const municipio = ((municipios ?? []) as MunicipioTodoBrasil[]).find(
+        (item) => {
+          const municipioNormalizado = normalizarTexto(item.municipio)
+            .replace(/\s+/g, " ")
+            .trim();
+
+          const ufMunicipio = (item.uf ?? "").trim().toUpperCase();
+
+          return (
+            ufMunicipio === uf &&
+            municipioNormalizado === cidadeNormalizada
+          );
+        },
+      );
+
+      if (!municipio) {
+        throw new Error(
+          `O município ${cidade}/${uf} não foi encontrado na tabela de localidades da Todo Brasil.`,
+        );
+      }
+
+      const { data: tarifas, error: erroTarifa } =
+        await supabase
+          .from("tabela_frete_todo_brasil")
+          .select(
+            `
+              regiao,
+              uf,
+              localidade,
+              frete_ate_30,
+              frete_30_50,
+              frete_50_70,
+              frete_70_100,
+              valor_kg_excedente,
+              ad_valorem_percentual,
+              gris_percentual,
+              pedagio_fracao_100kg,
+              taxa_despacho,
+              prazo_minimo_dias,
+              prazo_maximo_dias,
+              vigencia_inicio,
+              vigencia_fim,
+              ativo
+            `,
+          )
+          .eq("uf", uf)
+          .eq("localidade", municipio.classificacao)
+          .eq("ativo", true)
+          .order("vigencia_inicio", { ascending: false })
+          .limit(1);
+
+      if (erroTarifa) {
+        throw new Error(
+          `Erro ao consultar tarifa: ${erroTarifa.message}`,
+        );
+      }
+
+      const tarifa = ((tarifas ?? []) as TarifaTodoBrasil[])[0];
+
+      if (!tarifa) {
+        throw new Error(
+          `Não encontrei tarifa ativa para ${uf} / ${municipio.classificacao}.`,
+        );
+      }
+
+      let fretePeso = 0;
+
+      if (peso <= 30) {
+        fretePeso = Number(tarifa.frete_ate_30);
+      } else if (peso <= 50) {
+        fretePeso = Number(tarifa.frete_30_50);
+      } else if (peso <= 70) {
+        fretePeso = Number(tarifa.frete_50_70);
+      } else if (peso <= 100) {
+        fretePeso = Number(tarifa.frete_70_100);
+      } else {
+        fretePeso =
+          Number(tarifa.frete_70_100) +
+          (peso - 100) * Number(tarifa.valor_kg_excedente);
+      }
+
+      const pedagio =
+        Math.ceil(peso / 100) *
+        Number(tarifa.pedagio_fracao_100kg ?? 0);
+
+      const taxaDespacho = Number(tarifa.taxa_despacho ?? 0);
+
+      const adValoremPercentual = Number(
+        tarifa.ad_valorem_percentual ?? 0,
+      );
+      const grisPercentual = Number(
+        tarifa.gris_percentual ?? 0,
+      );
+
+      const adValoremCalculado =
+        valorNf * (adValoremPercentual / 100);
+      const grisCalculado =
+        valorNf * (grisPercentual / 100);
+
+      // Mínimos informados pela transportadora:
+      // Ad Valorem: R$ 5,66
+      // GRIS: R$ 2,50
+      //
+      // Importante:
+      // mantemos as casas decimais internas durante o cálculo
+      // e arredondamos apenas para exibição / valor final.
+      const adValorem = Math.max(
+        adValoremCalculado,
+        5.66,
+      );
+      const gris = Math.max(
+        grisCalculado,
+        2.5,
+      );
+
+      const subtotal =
+        fretePeso +
+        pedagio +
+        taxaDespacho +
+        adValorem +
+        gris;
+
+      // ICMS de 12% calculado "por dentro":
+      // total = subtotal / (1 - 0,12) = subtotal / 0,88
+      const icmsPercentual = 12;
+      const divisorIcms = 1 - icmsPercentual / 100;
+      const totalSemArredondar = subtotal / divisorIcms;
+      const valorIcms = totalSemArredondar - subtotal;
+      const total = arredondarMoeda(totalSemArredondar);
+
+      setValorFreteAutomatico(total.toFixed(2));
+      setDetalhesFrete({
+        classificacao: municipio.classificacao,
+        fretePeso: arredondarMoeda(fretePeso),
+        pedagio: arredondarMoeda(pedagio),
+        taxaDespacho: arredondarMoeda(taxaDespacho),
+        adValoremPercentual,
+        adValorem: arredondarMoeda(adValorem),
+        grisPercentual,
+        gris: arredondarMoeda(gris),
+        subtotal: arredondarMoeda(subtotal),
+        icmsPercentual,
+        valorIcms: arredondarMoeda(valorIcms),
+        total,
+        prazoMinimo: Number(tarifa.prazo_minimo_dias ?? 0),
+        prazoMaximo: Number(tarifa.prazo_maximo_dias ?? 0),
+      });
+    } catch (erro) {
+      console.error("Erro ao calcular frete automaticamente:", erro);
+
+      setValorFreteAutomatico("");
+      setDetalhesFrete(null);
+      setErroCalculoFrete(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível calcular o frete automaticamente.",
+      );
+    } finally {
+      setCalculandoFrete(false);
+    }
+  }
+
+  useEffect(() => {
+    const temporizador = window.setTimeout(() => {
+      calcularFreteTodoBrasil();
+    }, 350);
+
+    return () => window.clearTimeout(temporizador);
+  }, [
+    unidadeSelecionada,
+    transportadoraSelecionada,
+    buscaTransportadora,
+    pesoInformado,
+    valorNotaFiscal,
+  ]);
+
   const termoUnidade =
     normalizarTexto(buscaUnidade);
 
@@ -1180,6 +1484,11 @@ export default function FormNovaColeta() {
           "numeroNotaFiscal",
         ),
 
+      valor_nf_cliente:
+        numeroOuNulo(
+          "valorNotaFiscal",
+        ),
+
       arquivo_nf_cliente:
         caminhoNfCliente,
 
@@ -1369,6 +1678,11 @@ export default function FormNovaColeta() {
     setBuscaTransportadora("");
     setTransportadoraSelecionada(null);
     setListaTransportadorasAberta(false);
+    setPesoInformado("");
+    setValorNotaFiscal("");
+    setValorFreteAutomatico("");
+    setDetalhesFrete(null);
+    setErroCalculoFrete("");
 
     setAbaAtiva("operacao");
 
@@ -1933,6 +2247,25 @@ export default function FormNovaColeta() {
             </label>
 
             <label className={rotulo}>
+              Valor da Nota Fiscal (R$)
+              <input
+                type="number"
+                name="valorNotaFiscal"
+                min="0"
+                step="0.01"
+                value={valorNotaFiscal}
+                onChange={(evento) =>
+                  setValorNotaFiscal(evento.target.value)
+                }
+                placeholder="Ex.: 12500,00"
+                className={campo}
+              />
+              <span className="mt-1 block text-xs font-normal text-slate-500">
+                Base para cálculo automático de Ad Valorem e GRIS.
+              </span>
+            </label>
+
+            <label className={rotulo}>
               Anexar Nota Fiscal
               <input
                 type="file"
@@ -2231,6 +2564,10 @@ export default function FormNovaColeta() {
                 name="peso"
                 min="0"
                 step="0.01"
+                value={pesoInformado}
+                onChange={(evento) =>
+                  setPesoInformado(evento.target.value)
+                }
                 placeholder="Ex.: 125,50"
                 className={campo}
               />
@@ -2302,9 +2639,47 @@ export default function FormNovaColeta() {
                 name="valorFrete"
                 min="0"
                 step="0.01"
-                placeholder="Ex.: 850,00"
+                value={valorFreteAutomatico}
+                onChange={(evento) =>
+                  setValorFreteAutomatico(evento.target.value)
+                }
+                placeholder={
+                  calculandoFrete
+                    ? "Calculando..."
+                    : "Ex.: 850,00"
+                }
                 className={campo}
               />
+
+              {calculandoFrete && (
+                <span className="mt-2 block text-xs font-medium text-blue-600">
+                  Consultando tabela da Todo Brasil...
+                </span>
+              )}
+
+              {!calculandoFrete && detalhesFrete && (
+                <span className="mt-2 block text-xs leading-5 text-emerald-700">
+                  Cálculo automático · {detalhesFrete.classificacao} ·
+                  Frete peso R$ {detalhesFrete.fretePeso.toFixed(2)} +
+                  Ad Valorem {detalhesFrete.adValoremPercentual.toFixed(3)}%
+                  {" "}R$ {detalhesFrete.adValorem.toFixed(2)} +
+                  GRIS {detalhesFrete.grisPercentual.toFixed(3)}%
+                  {" "}R$ {detalhesFrete.gris.toFixed(2)} +
+                  pedágio R$ {detalhesFrete.pedagio.toFixed(2)} +
+                  despacho R$ {detalhesFrete.taxaDespacho.toFixed(2)}.
+                  Subtotal R$ {detalhesFrete.subtotal.toFixed(2)} ·
+                  ICMS {detalhesFrete.icmsPercentual.toFixed(0)}% por dentro:
+                  R$ {detalhesFrete.valorIcms.toFixed(2)} ·
+                  Frete final R$ {detalhesFrete.total.toFixed(2)} ·
+                  Prazo: {detalhesFrete.prazoMinimo} a {detalhesFrete.prazoMaximo} dias.
+                </span>
+              )}
+
+              {!calculandoFrete && erroCalculoFrete && (
+                <span className="mt-2 block text-xs leading-5 text-amber-700">
+                  {erroCalculoFrete}
+                </span>
+              )}
             </label>
 
             <label className={rotulo}>
